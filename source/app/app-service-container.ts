@@ -34,10 +34,43 @@ import TargetProvider from '@providers/targets'
 import TrayProvider from '@providers/tray'
 import UpdateProvider from '@providers/updates'
 import WindowProvider from '@providers/windows'
-import WorkspaceProvider from '@providers/workspaces'
 import { dialog } from 'electron'
+import { closeSplashScreen, showSplashScreen, updateSplashScreen } from './util/splash-screen'
+import path from 'path'
+import { trans } from 'source/common/i18n-main'
 
-export default class AppServiceContainer {
+// We need module-global variables so that garbage collect won't shut down the
+// providers before the app is shut down.
+let appServiceContainer: AppServiceContainer|undefined
+
+// TODO: This function makes no sense in this module; find a better place!
+/**
+ * Retrieve the single App Service Container.
+ *
+ * @return  {AppServiceContainer}  The app service container.
+ */
+export function getAppServiceContainer (): AppServiceContainer {
+  if (appServiceContainer === undefined || !appServiceContainer.isBooted) {
+    throw new Error('Do not access the app service container before boot')
+  }
+
+  return appServiceContainer
+}
+
+/**
+ * Returns true after the app service container is booted.
+ *
+ * @return  {boolean}  Whether the app service container is booted.
+ */
+export function isAppServiceContainerReady (): boolean {
+  return appServiceContainer?.isBooted ?? false
+}
+
+export function setAppServiceContainer (container: AppServiceContainer) {
+  appServiceContainer = container
+}
+
+export class AppServiceContainer {
   private readonly _appearanceProvider: AppearanceProvider
   private readonly _assetsProvider: AssetsProvider
   private readonly _citeprocProvider: CiteprocProvider
@@ -57,11 +90,12 @@ export default class AppServiceContainer {
   private readonly _windowProvider: WindowProvider
   private readonly _fsal: FSAL
   private readonly _documentManager: DocumentManager
-  private readonly _workspaces: WorkspaceProvider
+  private _isBooted: boolean
 
   constructor () {
     // NOTE: We need to instantiate the providers according to their dependence
     // on other providers.
+    this._isBooted = false
 
     // First section: Crucial providers
     this._logProvider = new LogProvider()
@@ -77,13 +111,12 @@ export default class AppServiceContainer {
     this._appearanceProvider = new AppearanceProvider(this._logProvider, this._configProvider)
     this._dictionaryProvider = new DictionaryProvider(this._logProvider, this._configProvider)
 
-    this._workspaces = new WorkspaceProvider(this._logProvider, this._configProvider, this._fsal)
     this._targetProvider = new TargetProvider(this._logProvider, this._fsal)
-    this._linkProvider = new LinkProvider(this._logProvider, this._workspaces)
+    this._linkProvider = new LinkProvider(this._logProvider, this._configProvider, this._fsal)
     
     // The document provider accesses only the FSAL in its constructor
     this._documentManager = new DocumentManager(this)
-    this._tagProvider = new TagProvider(this._logProvider, this._documentManager, this._workspaces)
+    this._tagProvider = new TagProvider(this._logProvider, this._documentManager, this._configProvider, this._fsal)
     this._windowProvider = new WindowProvider(this._logProvider, this._configProvider, this._documentManager)
 
     this._citeprocProvider = new CiteprocProvider(this._logProvider, this._configProvider, this._windowProvider)
@@ -106,19 +139,41 @@ export default class AppServiceContainer {
     // can't do this in the exact same order, because the dependencies are only
     // required for the variables, while the boot function may access them in
     // different order.
+
     await this._informativeBoot(this._logProvider, 'LogProvider')
+    // We boot the CSS provider very early just so that it can create the CSS
+    // file. This is not really critical, but prevents an error upon first start
+    // when the onboarding dialog is shown by the ConfigProvider, which will
+    // request the custom CSS file.
+    await this._informativeBoot(this._cssProvider, 'CSSProvider')
     await this._informativeBoot(this._configProvider, 'ConfigProvider')
+
+    // If the booting isn't done after 1 second, begin displaying a splash
+    // screen to indicate to the user that things are happening, even if the
+    // main window(s) don't yet show. NOTE: We have to defer showing the splash
+    // screen until AFTER the config provider has been booted, as that one may
+    // show an onboarding window.
+    const timeout = setTimeout(() => {
+      showSplashScreen(this.log)
+    }, 1000)
+
     await this._informativeBoot(this._fsal, 'FSAL')
 
     await this._informativeBoot(this._recentDocsProvider, 'RecentDocsProvider')
     await this._informativeBoot(this._assetsProvider, 'AssetsProvider')
-    await this._informativeBoot(this._cssProvider, 'CSSProvider')
     await this._informativeBoot(this._statsProvider, 'StatsProvider')
 
     await this._informativeBoot(this._appearanceProvider, 'AppearanceProvider')
     await this._informativeBoot(this._dictionaryProvider, 'DictionaryProvider')
 
-    await this._informativeBoot(this._workspaces, 'WorkspaceProvider')
+    // Reindex every file if necessary. Needs to come after appearance provider
+    // and CSS provider (due to splashscreen), and before anything that accesses
+    // the FSAL.
+
+    await this.fsal.reindexFiles((absPath, currentPercent) => {
+      updateSplashScreen(trans('Indexing %s…', path.basename(absPath)), currentPercent)
+    })
+
     await this._informativeBoot(this._targetProvider, 'TargetProvider')
     await this._informativeBoot(this._linkProvider, 'LinkProvider')
 
@@ -138,6 +193,7 @@ export default class AppServiceContainer {
     this._menuProvider.set() // TODO
 
     this.log.info('[AppServiceContainer] Boot successful!')
+    this._isBooted = true
 
     // Now that the config provider is definitely set up, let's see if we
     // should copy the interactive tutorial to the documents directory.
@@ -147,9 +203,14 @@ export default class AppServiceContainer {
         .catch(err => this.log.error('[AppServiceContainer] Could not open tutorial', err))
     }
 
+    clearTimeout(timeout)
+    closeSplashScreen()
+
     // After everything has been booted up, show the windows
     this.windows.maybeShowWindows()
   }
+
+  public get isBooted () { return this._isBooted }
 
   /**
    * Returns the appearance provider
@@ -247,11 +308,6 @@ export default class AppServiceContainer {
   public get commands (): CommandProvider { return this._commandProvider }
 
   /**
-   * Returns the WorkspaceProvider
-   */
-  public get workspaces (): WorkspaceProvider { return this._workspaces }
-
-  /**
    * Prepares quitting the app by shutting down the service providers
    */
   async shutdown (): Promise<void> {
@@ -273,7 +329,6 @@ export default class AppServiceContainer {
     await this._safeShutdown(this._citeprocProvider, 'CiteprocProvider')
     await this._safeShutdown(this._assetsProvider, 'AssetsProvider')
     await this._safeShutdown(this._appearanceProvider, 'AppearanceProvider')
-    await this._safeShutdown(this._workspaces, 'WorkspaceProvider')
     await this._safeShutdown(this._configProvider, 'ConfigProvider')
     await this._safeShutdown(this._logProvider, 'LogProvider')
   }
@@ -305,7 +360,10 @@ export default class AppServiceContainer {
    */
   private async _informativeBoot <T extends ProviderContract> (provider: T, displayName: string): Promise<void> {
     try {
+      const start = performance.now()
+      updateSplashScreen(trans('Booting %s…', displayName), 0)
       await provider.boot()
+      this._logProvider.verbose(`[AppServiceContainer] Booted ${displayName} in ${Math.round(performance.now() - start)}ms`)
     } catch (err: any) {
       const title = `Error starting ${displayName}`
       const message = `Could not start ${displayName}: ${err.message as string}`

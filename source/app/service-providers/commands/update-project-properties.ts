@@ -14,9 +14,10 @@
 
 import type { ProjectSettings } from '@dts/common/fsal'
 import ZettlrCommand from './zettlr-command'
+import type { AppServiceContainer } from 'source/app/app-service-container'
 
 export default class UpdateProjectProperties extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'update-project-properties')
   }
 
@@ -30,7 +31,7 @@ export default class UpdateProjectProperties extends ZettlrCommand {
     // expects them already in their expanded state.
     // let expanded = expandOptionObject(arg.properties)
     // Find the directory, and apply the properties to it!
-    const dir = this._app.workspaces.findDir(arg.path)
+    const dir = await this._app.fsal.getAnyDirectoryDescriptor(arg.path)
     if (dir !== undefined) {
       await this._app.fsal.updateProject(dir, arg.properties)
     } else {

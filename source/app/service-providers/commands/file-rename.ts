@@ -19,18 +19,21 @@ import { dialog } from 'electron'
 import { trans } from '@common/i18n-main'
 import replaceLinks from '@common/util/replace-links'
 import { hasMdOrCodeExt } from '@common/util/file-extention-checks'
+import type { AppServiceContainer } from 'source/app/app-service-container'
+import pathExists from 'source/common/util/path-exists'
 
 export default class FileRename extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'file-rename')
   }
 
   /**
    * Rename a file
-   * @param {string} evt The event name
-   * @param  {Object} arg An object containing hash of containing and name of new dir.
+   *
+   * @param  {string}  evt  The event name
+   * @param  {any}     arg  An object containing hash of containing and name of new dir.
    */
-  async run (evt: string, arg: any): Promise<void> {
+  async run (evt: string, arg: { path: string, name: string }): Promise<void> {
     // We need to prepare the name to be correct for
     // accurate checking whether or not the file
     // already exists
@@ -46,7 +49,7 @@ export default class FileRename extends ZettlrCommand {
       newName += '.md'
     }
 
-    const file = this._app.workspaces.findFile(arg.path)
+    const file = await this._app.fsal.getDescriptorForAnySupportedFile(arg.path)
     if (file === undefined) {
       return this._app.log.error(`Could not find file ${String(arg.path)}`)
     }
@@ -78,12 +81,11 @@ export default class FileRename extends ZettlrCommand {
     // Thus, we need to check two conditions: Whether the user has requested a
     // case change only, and whethere there is a DIFFERENT file at that new
     // place.
-    const newPathFile = this._app.workspaces.findFile(newPath)
     const caseChangeOnly = newName.toLowerCase() === file.name.toLowerCase()
 
     if (await this._app.fsal.pathExists(newPath)) {
       // The file system reports the newPath already exists.
-      if (caseChangeOnly && (newPathFile === undefined || newPathFile === file)) {
+      if (caseChangeOnly && await pathExists(newPath)) {
         // The user only changed the case. Based on the second check, it appears
         // that this file system is case-insensitive, which means that the
         // reason `pathExists()` has returned true is because it confirms the
@@ -106,8 +108,8 @@ export default class FileRename extends ZettlrCommand {
 
       // Before renaming the file, let's see if it is a root file. Because if it
       // is, we have to close it first.
-      const { openPaths } = this._app.config.getConfig()
-      const isRoot = openPaths.includes(file.path)
+      const { openFiles } = this._app.config.getConfig().app
+      const isRoot = openFiles.includes(file.path)
 
       if (isRoot) {
         this._app.config.removePath(file.path)

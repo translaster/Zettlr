@@ -13,23 +13,18 @@
  */
 
 import ZettlrCommand from './zettlr-command'
-import { app } from 'electron'
-import { makeExport } from './exporter'
-import type { ExporterOptions } from './exporter/types'
-import { EXT2READER } from '@common/pandoc-util/pandoc-maps'
-import { showNativeNotification } from '@common/util/show-notification'
-import { parseReaderWriter } from '@common/pandoc-util/parse-reader-writer'
+import type { AppServiceContainer } from 'source/app/app-service-container'
 
 export default class Print extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'print')
   }
 
   /**
    * Prints the current file (in: opening the print window)
-   * @param {String} evt The event name
-   * @param {Object} arg The argument
-   * @return {Boolean} Whether the command ran successful
+   *
+   * @param  {string}  evt The event name
+   * @param  {any}     arg The argument
    */
   async run (evt: string, arg?: string): Promise<void> {
     const filePath = arg
@@ -39,48 +34,13 @@ export default class Print extends ZettlrCommand {
       return
     }
 
-    const fileDescriptor = this._app.workspaces.findFile(filePath)
+    const fileDescriptor = await this._app.fsal.getDescriptorForAnySupportedFile(filePath)
 
     if (fileDescriptor === undefined) {
       this._app.log.error('[Print] Cannot print document: Not found.')
       return
     }
 
-    const extWithoutDot = fileDescriptor.ext.substring(1)
-
-    if (!(extWithoutDot in EXT2READER)) {
-      this._app.log.error(`[Print] Cannot print document: File extension "${extWithoutDot}" not recognized.`)
-      return
-    }
-
-    // Retrieve all profiles ...
-    const profiles = (await this._app.assets.listDefaults())
-      // ... sans invalid ones ...
-      .filter(profile => !profile.isInvalid)
-      // ... or those that do not have an HTML writer ...
-      .filter(profile => parseReaderWriter(profile.writer).name === 'html')
-      // ... and those that feature incompatible readers.
-      .filter(profile => EXT2READER[extWithoutDot].includes(parseReaderWriter(profile.reader).name))
-
-    const opt: ExporterOptions = {
-      profile: profiles[0], // First valid filtered profile will be used
-      sourceFiles: [fileDescriptor], // The file to be exported
-      targetDirectory: app.getPath('temp'), // Export to temporary directory
-      cwd: fileDescriptor.dir
-    }
-
-    // Call the exporter.
-    try {
-      this._app.log.verbose('[Printer] Exporting file to HTML ...')
-      const output = await makeExport(opt, this._app.log, this._app.config, this._app.assets)
-      if (output.code !== 0) {
-        throw new Error(`Export failed with code ${output.code}`)
-      }
-      // Now we'll need to open the print window.
-      this._app.windows.showPrintWindow(output.targetFile)
-    } catch (err: any) {
-      this._app.log.error(`[Print] Could not export document: ${err.message as string}`, err)
-      showNativeNotification(`${err.name as string}: ${err.message as string}`)
-    }
+    this._app.windows.showPrintWindow(fileDescriptor.path)
   }
 }

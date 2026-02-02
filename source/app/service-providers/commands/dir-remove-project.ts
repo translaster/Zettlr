@@ -12,20 +12,22 @@
  * END HEADER
  */
 
+import type { AppServiceContainer } from 'source/app/app-service-container'
 import ZettlrCommand from './zettlr-command'
 
 export default class DirRemoveProject extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'dir-remove-project')
   }
 
   /**
     * Remove the project of a directory
-    * @param {String} evt The event name
-    * @param  {Object} arg The hash of a directory.
+    *
+    * @param  {string} evt  The event name
+    * @param  {any}    arg  The payload
     */
-  async run (evt: string, arg: any): Promise<void> {
-    let dir = this._app.workspaces.findDir(arg.path)
+  async run (evt: string, arg: { path: string }): Promise<void> {
+    let dir = await this._app.fsal.getAnyDirectoryDescriptor(arg.path)
     if (dir !== undefined) {
       await this._app.fsal.removeProject(dir)
     } else {

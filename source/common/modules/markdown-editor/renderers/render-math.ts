@@ -16,11 +16,11 @@ import { renderBlockWidgets } from './base-renderer'
 import { type SyntaxNode, type SyntaxNodeRef } from '@lezer/common'
 import { WidgetType, EditorView } from '@codemirror/view'
 
-import katex from 'katex'
-import 'katex/contrib/mhchem'
 import { type EditorState } from '@codemirror/state'
 import clickAndSelect from './click-and-select'
 import { equationMenu } from '../context-menu/equation-menu'
+import { katexToElem } from 'source/common/util/mathtex-to-html'
+import { rangeInSelection } from '../util/range-in-selection'
 
 class MathWidget extends WidgetType {
   constructor (readonly equation: string, readonly displayMode: boolean, readonly node: SyntaxNode) {
@@ -37,7 +37,7 @@ class MathWidget extends WidgetType {
     const elem = document.createElement('span')
     elem.classList.add('preview-math')
     elem.dataset.equation = this.equation
-    katex.render(this.equation, elem, { throwOnError: false, displayMode: this.displayMode })
+    katexToElem(this.equation, elem, this.displayMode)
     elem.addEventListener('click', clickAndSelect(view))
     elem.addEventListener('contextmenu', (event) => {
       equationMenu(view, this.equation, { x: event.clientX, y: event.clientY })
@@ -51,7 +51,7 @@ class MathWidget extends WidgetType {
     }
 
     dom.dataset.equation = this.equation
-    katex.render(this.equation, dom, { throwOnError: false, displayMode: this.displayMode })
+    katexToElem(this.equation, dom, this.displayMode)
     return true
   }
 
@@ -88,6 +88,12 @@ function createWidget (state: EditorState, node: SyntaxNodeRef): MathWidget|unde
   // and then remove the leading and trailing dollars. Also, pass a stable node
   // reference (SyntaxNodeRef will be dropped, but the SyntaxNode itself will
   // stay, and keep its position updated depending on what happens in the doc)
+
+  // Don't render if the selection is within the node
+  if (rangeInSelection(state.selection, node.from, node.to, true)) {
+    return undefined
+  }
+
   const nodeText = state.sliceDoc(node.from, node.to)
   if (!nodeText.startsWith('$') && (!nodeText.endsWith('$\n') || nodeText.endsWith('$'))) {
     return undefined // It's regular FencedCode/InlineCode

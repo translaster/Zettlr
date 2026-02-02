@@ -26,6 +26,7 @@ import { CITEPROC_MAIN_DB } from '@dts/common/citeproc'
 import path from 'path'
 import type { MDFileDescriptor } from '@dts/common/fsal'
 import { showNativeNotification } from '@common/util/show-notification'
+import type { AppServiceContainer } from 'source/app/app-service-container'
 
 // This function overwrites the getBibliographyForDescriptor function to ensure
 // the library is always absolute. We have to do it this ridiculously since the
@@ -42,21 +43,22 @@ function getBibliographyForDescriptor (descriptor: MDFileDescriptor): string {
 }
 
 export default class OpenAttachment extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'open-attachment')
   }
 
   /**
    * Attempt to open a PDF (or other) attachment for a given citekey.
-   * @param {String} evt The event name
-   * @param  {Object} arg An object containing the citekey to open.
+   *
+   * @param  {string}  evt The event name
+   * @param  {any}     arg An object containing the citekey to open.
    */
-  async run (evt: string, arg: any): Promise<boolean> {
+  async run (evt: string, arg: { filePath: string, citekey: string }): Promise<boolean> {
     if (!('citekey' in arg) || typeof arg.citekey !== 'string') {
       return false
     }
 
-    const descriptor = this._app.workspaces.find(arg.filePath)
+    const descriptor = await this._app.fsal.getDescriptorFor(arg.filePath)
     if (descriptor === undefined || descriptor.type !== 'file') {
       return false
     }
@@ -105,7 +107,7 @@ export default class OpenAttachment extends ZettlrCommand {
       }
 
       // Now map the result set. It will contain ALL attachments.
-      let allAttachments = res.result.map((elem: any) => elem.path)
+      let allAttachments: string[] = res.result.map((elem: any) => elem.path)
       // Sort them with PDFs on top
       allAttachments = allAttachments.sort(pdfSorter)
       const potentialError = await shell.openPath(allAttachments[0])

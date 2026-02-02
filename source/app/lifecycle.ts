@@ -22,14 +22,10 @@ import path from 'path'
 import { getProgramVersion } from './util/get-program-version'
 
 // Developer tools
-import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-assembler'
-import AppServiceContainer from './app-service-container'
+import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer'
+import { AppServiceContainer, getAppServiceContainer, setAppServiceContainer } from './app-service-container'
 import { app } from 'electron'
 import { attachAppNavigationHandlers } from './util/attach-app-navigation-handlers'
-
-// We need module-global variables so that garbage collect won't shut down the
-// providers before the app is shut down.
-let appServiceContainer: AppServiceContainer
 
 // Statistics: Record the uptime of the application
 let upTimestamp: number
@@ -49,7 +45,7 @@ export async function bootApplication (): Promise<AppServiceContainer> {
   // We need to instantiate the service container right away to have access to
   // the log and config providers. Then we just need to remember to boot it
   // before we access anything important.
-  appServiceContainer = new AppServiceContainer()
+  const appServiceContainer = new AppServiceContainer()
   const config = appServiceContainer.config
   const log = appServiceContainer.log
 
@@ -59,11 +55,11 @@ export async function bootApplication (): Promise<AppServiceContainer> {
   if (!app.isPackaged) {
     try {
       // Load Vue developer extension
-      log.info('Installing VueJS3 DevTools extension ...')
-      const name = await installExtension(VUEJS_DEVTOOLS)
-      log.info(`Added DevTools extension: ${name}`)
+      log.info('Installing developer extensions ...')
+      const extension = await installExtension(VUEJS_DEVTOOLS)
+      log.info(`Added extension: ${extension.name} v${extension.version}`)
     } catch (err: any) {
-      log.error(`Could not install DevTools extension: ${String(err.message)}`, err)
+      log.error(`Could not install extension: ${String(err.message)}`, err)
     }
   }
 
@@ -75,6 +71,9 @@ export async function bootApplication (): Promise<AppServiceContainer> {
 
   // Now boot up the service container
   await appServiceContainer.boot()
+
+  // Now make the service container available for the rest of the main process.
+  setAppServiceContainer(appServiceContainer)
 
   // If we have a bundled pandoc, unshift its path to env.PATH in order to have
   // the system search there first for the binary, and not use the internal
@@ -106,6 +105,7 @@ export async function bootApplication (): Promise<AppServiceContainer> {
  * @return  {Promise<void>}  Resolves always
  */
 export async function shutdownApplication (): Promise<void> {
+  const appServiceContainer = getAppServiceContainer()
   const log = appServiceContainer.log
   log.info(`さようなら！ Shutting down at ${(new Date()).toString()}`)
 
@@ -116,9 +116,15 @@ export async function shutdownApplication (): Promise<void> {
 
   // Now construct the message. Always include minutes, seconds, and milliseconds
   let uptimeMessage: string = `${span.minutes} minutes, and ${span.seconds}.${span.ms} seconds`
-  if (span.hours > 0) uptimeMessage = `${span.hours} hours, ${uptimeMessage}`
-  if (span.days > 0) uptimeMessage = `${span.days} days, ${uptimeMessage}`
-  if (span.weeks > 0) uptimeMessage = `${span.weeks} weeks, ${uptimeMessage}`
+  if (span.hours > 0) {
+    uptimeMessage = `${span.hours} hours, ${uptimeMessage}`
+  }
+  if (span.days > 0) {
+    uptimeMessage = `${span.days} days, ${uptimeMessage}`
+  }
+  if (span.weeks > 0) {
+    uptimeMessage = `${span.weeks} weeks, ${uptimeMessage}`
+  }
 
   log.info(`Application uptime was: ${uptimeMessage}.`)
 
@@ -127,8 +133,4 @@ export async function shutdownApplication (): Promise<void> {
   }
 
   await appServiceContainer.shutdown()
-}
-
-export function getServiceContainer (): AppServiceContainer|undefined {
-  return appServiceContainer
 }

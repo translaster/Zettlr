@@ -18,7 +18,6 @@ import { type EditorState, type Line } from '@codemirror/state'
 import { configField } from './configuration'
 import { EditorView } from '@codemirror/view'
 import { tocField } from '../plugins/toc-field'
-import { hasMdOrCodeExt } from '@common/util/file-extention-checks'
 import { isAbsolutePath, pathDirname } from '@common/util/renderer-path-polyfill'
 import type { DocumentManagerIPCAPI } from 'source/app/service-providers/documents'
 
@@ -61,7 +60,7 @@ export default function (url: string, view: EditorView): void {
     }
   } else {
     const searchParams = new URLSearchParams(window.location.search)
-    const windowId = searchParams.get('window_id') as string
+    const windowId = searchParams.get('window_id')
     const base = pathDirname(view.state.field(configField).metadata.path)
     const validURI = makeValidUri(url, base)
 
@@ -77,7 +76,7 @@ export default function (url: string, view: EditorView): void {
 
     // It's a valid file we can open if it's an absolute path to a Markdown or
     // code file
-    if (validURI.startsWith('safe-file://') && isAbsolutePath(localPath) && hasMdOrCodeExt(localPath)) {
+    if (validURI.startsWith('safe-file://') && isAbsolutePath(localPath)) {
       ipcRenderer.invoke('documents-provider', {
         command: 'open-file',
         payload: { path: localPath, newTab: false, windowId }

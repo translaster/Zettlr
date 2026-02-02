@@ -15,16 +15,15 @@
 import { type EditorState } from '@codemirror/state'
 import { type EditorView } from '@codemirror/view'
 import { trans } from '@common/i18n-renderer'
-import showPopupMenu from '@common/modules/window-register/application-menu-helper'
-import { type AnyMenuItem } from '@dts/renderer/context'
+import showPopupMenu, { type AnyMenuItem } from '@common/modules/window-register/application-menu-helper'
 import { type SyntaxNode } from '@lezer/common'
 import openMarkdownLink from '../util/open-markdown-link'
-import { removeMarkdownLink } from '../util/remove-markdown-link'
 import { shortenUrlVisually } from '@common/util/shorten-url-visually'
 import makeValidUri from 'source/common/util/make-valid-uri'
 import { pathDirname } from 'source/common/util/renderer-path-polyfill'
 import { configField } from '../util/configuration'
 import type { WindowControlsIPCAPI } from 'source/app/service-providers/windows'
+import { findReferenceForLinkLabel, removeMarkdownLink } from '../util/links'
 
 const ipcRenderer = window.ipc
 
@@ -44,11 +43,32 @@ function getURLForNode (node: SyntaxNode, state: EditorState): string|undefined 
 
   const child = node.getChild('URL')
 
-  if (child === null) {
-    return undefined
-  } else {
+  if (child !== null) {
     return state.sliceDoc(child.from, child.to)
   }
+
+  // No URL child, which might indicate a reference-style link. For reference
+  // style links, URL nodes are in the reference, so above's construct will have
+  // by now found it. If we're here, we might be dealing with a link ref, which
+  // has the tree structure [text content][LinkLabel].
+  const label = node.type.name === 'Link' ? node.getChild('LinkLabel') : node
+  if (label === null || label.type.name !== 'LinkLabel') {
+    return undefined
+  }
+
+  // We have the link label. Now we just have to scour the rest of the
+  // document for the reference. We use a helper function for that.
+  const labelString = state.sliceDoc(label.from, label.to) // e.g., `[link]`
+  const ref = findReferenceForLinkLabel(state, labelString)
+
+  if (ref !== null) {
+    const url = ref.getChild('URL')
+    if (url !== null) {
+      return state.sliceDoc(url.from, url.to)
+    }
+  }
+
+  return undefined
 }
 
 /**
@@ -78,23 +98,31 @@ export function linkImageMenu (view: EditorView, node: SyntaxNode, coords: { x: 
       type: 'separator'
     },
     {
-      id: 'menu.open_link',
       label: trans('Open link'),
-      enabled: true,
-      type: 'normal'
+      type: 'normal',
+      action () { openMarkdownLink(url, view) }
     },
     {
       // It's either "Copy Link" or "Copy Mail"
-      id: 'menu.copy_link',
-      enabled: true,
       type: 'normal',
-      label: (url.indexOf('mailto:') === 0) ? trans('Copy email address') : trans('Copy link')
+      label: (url.indexOf('mailto:') === 0) ? trans('Copy email address') : trans('Copy link'),
+      action () {
+        const sanitizedUrl = url.replace(/^<|>$/g, '') // Remove markdown characters
+        navigator.clipboard.writeText(sanitizedUrl).catch(err => console.error(err))
+      }
     },
     {
-      id: 'menu.remove_link',
-      enabled: true,
       type: 'normal',
-      label: trans('Remove link')
+      label: trans('Remove link'),
+      action () {
+        if (node.type.name === 'URL' && node.parent?.type.name === 'Link') {
+          // Handles when user clicks on (url) node in the [text](url) type link
+          removeMarkdownLink(node.parent, view)
+        } else {
+          // Handles when user clicks on [text] part of [text](url) type link or <url> part of <url> type link
+          removeMarkdownLink(node, view)
+        }
+      }
     }
   ]
 
@@ -112,38 +140,21 @@ export function linkImageMenu (view: EditorView, node: SyntaxNode, coords: { x: 
     {
       label: trans('Open image'),
       id: 'open-img-in-browser',
-      enabled: true,
-      type: 'normal'
+      type: 'normal',
+      action () { window.location.href = validAbsoluteURI }
     },
     {
       label: process.platform === 'darwin' ? trans('Reveal in Finder') : trans('Open in File Browser'),
-      id: 'show-img-in-folder',
       enabled: isFileLink,
-      type: 'normal'
+      type: 'normal',
+      action () {
+        ipcRenderer.send('window-controls', {
+          command: 'show-item-in-folder',
+          payload: { itemPath: validAbsoluteURI }
+        } as WindowControlsIPCAPI)
+      }
     }
   ]
 
-  showPopupMenu(coords, isLink ? linkTpl : imgTpl, (clickedID) => {
-    if (clickedID === 'menu.copy_link') {
-      const sanitizedUrl = url.replace(/^<|>$/g, '') // Remove markdown characters
-      navigator.clipboard.writeText(sanitizedUrl).catch(err => console.error(err))
-    } else if (clickedID === 'menu.open_link') {
-      openMarkdownLink(url, view)
-    } else if (clickedID === 'show-img-in-folder') {
-      ipcRenderer.send('window-controls', {
-        command: 'show-item-in-folder',
-        payload: { itemPath: validAbsoluteURI }
-      } as WindowControlsIPCAPI)
-    } else if (clickedID === 'open-img-in-browser') {
-      window.location.href = validAbsoluteURI
-    } else if (clickedID === 'menu.remove_link') {
-      if (node.type.name === 'URL' && node.parent?.type.name === 'Link') {
-        // Handles when user clicks on (url) node in the [text](url) type link
-        removeMarkdownLink(node.parent, view)
-      } else {
-        // Handles when user clicks on [text] part of [text](url) type link or <url> part of <url> type link
-        removeMarkdownLink(node, view)
-      }
-    }
-  })
+  showPopupMenu(coords, isLink ? linkTpl : imgTpl)
 }

@@ -32,11 +32,14 @@ module.exports = {
         { from: 'static/defaults', to: 'assets/defaults' },
         { from: 'static/lua-filter', to: 'assets/lua-filter' },
         { from: 'resources/icons/icon.ico', to: 'assets/icons' },
-        { from: 'resources/icons/png', to: 'assets/icons/png' }
+        { from: 'resources/icons/png', to: 'assets/icons/png' },
+        { from: 'resources/icons/macOS-menubar', to: 'assets/icons/macOS-menubar' }
       ]
     }),
     new DefinePlugin({
-      __GIT_COMMIT_HASH__: JSON.stringify(process.env.GIT_COMMIT_HASH)
+      __GIT_COMMIT_HASH__: JSON.stringify(process.env.GIT_COMMIT_HASH),
+      __BUILD_DATE__: JSON.stringify((new Date()).toISOString()),
+      __UPDATES_DISABLED__: JSON.stringify(process.env.ZETTLR_DISABLE_UPDATE_CHECK !== undefined ? '1' : '0')
     })
   ],
   resolve: {
@@ -56,6 +59,7 @@ module.exports = {
       'readable-stream/passthrough': [
         path.resolve(__dirname, 'node_modules/lazystream/node_modules/readable-stream/')
       ],
+      source: [path.resolve(__dirname, 'source')],
       '@common': [path.resolve(__dirname, 'source/common')],
       '@providers': [path.resolve(__dirname, 'source/app/service-providers')],
       '@dts': [path.resolve(__dirname, 'source/types')]

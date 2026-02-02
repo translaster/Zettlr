@@ -21,6 +21,7 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
   return [
     {
       title: trans('Input mode'),
+      infoString: trans('The input mode determines how you interact with the editor. We recommend keeping this setting at "Normal". Only choose "Vim" or "Emacs" if you know what this implies.'),
       group: PreferencesGroups.Editor,
       titleField: {
         type: 'select',
@@ -32,36 +33,39 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
         }
       },
       help: undefined, // TODO
-      fields: [
-        {
-          type: 'form-text',
-          display: 'info',
-          contents: trans('The input mode determines how you interact with the editor. We recommend keeping this setting at "Normal". Only choose "Vim" or "Emacs" if you know what this implies.')
-        }
-      ]
+      fields: []
     },
     {
       title: trans('Writing direction'),
+      infoString: trans('We are currently planning on re-introducing bidirectional writing support, which will then be configurable here.'),
       group: PreferencesGroups.Editor,
       help: undefined, // TODO
       fields: [
         // TODO: Add field for LTR/RTL
-        {
-          type: 'form-text',
-          display: 'info',
-          contents: 'We are currently planning on re-introducing bidirectional writing support, which will then be configurable here.'
-        }
       ]
     },
     {
       title: trans('Markdown rendering'),
+      infoString: trans('Check to enable live rendering of various Markdown elements to formatted appearance. This hides formatting characters (such as **text**) or renders images instead of their link.'),
       group: PreferencesGroups.Editor,
       help: undefined, // TODO
       fields: [
+        { type: 'separator' },
+        {
+          type: 'radio',
+          label: trans('Choose between preview mode ("WYSIWYG) or raw mode ("WYSIWYM").'),
+          model: 'display.renderingMode',
+          inline: true,
+          options: {
+            preview: trans('Preview mode'),
+            raw: trans('Raw mode')
+          }
+        },
+        { type: 'separator' },
         {
           type: 'form-text',
-          display: 'info',
-          contents: trans('Check to enable live rendering of various Markdown elements to formatted appearance. This hides formatting characters (such as **text**) or renders images instead of their link.')
+          display: 'plain',
+          contents: trans('Enable the following renderers in preview mode:')
         },
         {
           type: 'style-group',
@@ -70,51 +74,72 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
             {
               type: 'checkbox',
               label: trans('Render citations'),
-              model: 'display.renderCitations'
+              model: 'display.renderCitations',
+              disabled: config.display.renderingMode === 'raw'
             },
             {
               type: 'checkbox',
               label: trans('Render iframes'),
-              model: 'display.renderIframes'
+              model: 'display.renderIframes',
+              disabled: config.display.renderingMode === 'raw'
             },
             {
               type: 'checkbox',
               label: trans('Render images'),
-              model: 'display.renderImages'
+              model: 'display.renderImages',
+              disabled: config.display.renderingMode === 'raw'
             },
             {
               type: 'checkbox',
               label: trans('Render links'),
-              model: 'display.renderLinks'
+              model: 'display.renderLinks',
+              disabled: config.display.renderingMode === 'raw'
             },
             {
               type: 'checkbox',
               label: trans('Render formulae'),
-              model: 'display.renderMath'
+              model: 'display.renderMath',
+              disabled: config.display.renderingMode === 'raw'
             },
             {
               type: 'checkbox',
               label: trans('Render tasks'),
-              model: 'display.renderTasks'
+              model: 'display.renderTasks',
+              disabled: config.display.renderingMode === 'raw'
             },
             {
               type: 'checkbox',
               label: trans('Hide heading characters'),
-              model: 'display.renderHTags'
+              model: 'display.renderHTags',
+              disabled: config.display.renderingMode === 'raw'
             },
             {
               type: 'checkbox',
               label: trans('Render emphasis'),
-              model: 'display.renderEmphasis'
+              model: 'display.renderEmphasis',
+              disabled: config.display.renderingMode === 'raw'
+            },
+            {
+              type: 'checkbox',
+              label: trans('Render pandoc divs and spans'),
+              model: 'display.renderPandoc',
+              disabled: config.display.renderingMode === 'raw'
+            },
+            {
+              type: 'checkbox',
+              label: trans('Render horizontal rules'),
+              model: 'display.renderHorizontalRules',
+              disabled: config.display.renderingMode === 'raw'
             }
           ]
-        },
-        { type: 'separator' },
-        {
-          type: 'form-text',
-          display: 'sub-heading',
-          contents: trans('Formatting characters for bold and italics')
-        },
+        }
+      ]
+    },
+    {
+      title: trans('Default Formatting Characters'),
+      infoString: trans('Select the characters Zettlr should use when marking text as bold or italic.'),
+      group: PreferencesGroups.Editor,
+      fields: [
         {
           type: 'style-group',
           style: 'columns',
@@ -137,10 +162,16 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
             }
           ]
         },
-        { type: 'separator' },
+      ]
+    },
+    {
+      title: trans('Markdown Style'),
+      infoString: trans('Check your Markdown documents for style issues'),
+      group: PreferencesGroups.Editor,
+      fields: [
         {
           type: 'checkbox',
-          label: trans('Check Markdown for style issues'),
+          label: trans('Enable Markdown Linter'),
           model: 'editor.lint.markdown'
         }
       ]
@@ -154,6 +185,7 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
       },
       help: undefined, // TODO
       fields: [
+        // { type: 'separator' },
         {
           type: 'form-text',
           display: 'info',
@@ -162,7 +194,21 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
       ]
     },
     {
+      title: trans('Status bar'),
+      infoString: trans('The status bar is a section for various quick controls and shows information about the current document. It is shown for both Markdown and code editors.'),
+      group: PreferencesGroups.Editor,
+      help: undefined, // TODO
+      fields: [
+        {
+          type: 'checkbox',
+          label: trans('Show status bar'),
+          model: 'editor.showStatusbar'
+        }
+      ]
+    },
+    {
       title: trans('Distraction-free mode'),
+      infoString: trans('Customize the appearance of the editor when the distraction-free mode is active.'),
       group: PreferencesGroups.Editor,
       help: undefined, // TODO
       fields: [
@@ -184,22 +230,22 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
       help: undefined, // TODO
       fields: [
         {
-          // TODO: Must be radio (Count words/Count characters)
           type: 'checkbox',
-          label: trans('Count characters instead of words (e.g., for Chinese)'),
+          label: trans('Show character count instead of word count'),
           model: 'editor.countChars'
         }
       ]
     },
     {
       title: trans('Readability mode'),
+      infoString: trans('Choose the algorithm to calculate readability scores.'),
       group: PreferencesGroups.Editor,
       help: undefined, // TODO
       fields: [
         {
           type: 'select',
           inline: true,
-          label: trans('Algorithm'),
+          label: trans('Readability Algorithm:'),
           model: 'editor.readabilityAlgorithm',
           options: {
             'dale-chall': 'Dale-Chall',
@@ -212,19 +258,20 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
     },
     {
       title: trans('Image size'),
+      infoString: trans('Restrict images to a percentage of the available editor width and height.'),
       group: PreferencesGroups.Editor,
       help: undefined, // TODO
       fields: [
         {
           type: 'slider',
-          label: trans('Maximum width of images (%s %)', config.display.imageWidth),
+          label: trans('Restrict width to %s %', config.display.imageWidth),
           min: 0,
           max: 100,
           model: 'display.imageWidth'
         },
         {
           type: 'slider',
-          label: trans('Maximum height of images (%s %)', config.display.imageHeight),
+          label: trans('Restrict height to %s %', config.display.imageHeight),
           min: 0,
           max: 100,
           model: 'display.imageHeight'
@@ -236,17 +283,19 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
       group: PreferencesGroups.Editor,
       help: undefined, // TODO
       fields: [
+        { type: 'separator' },
         {
           type: 'number',
-          label: trans('Font size'),
+          label: trans('Editor font size'),
           inline: true,
           model: 'editor.fontSize'
         },
         { type: 'separator' },
         {
           type: 'number',
-          label: trans('Indentation size (number of spaces)'),
+          label: trans('Tab size (in number of spaces)'),
           inline: true,
+          min: 2, max: 10,
           model: 'editor.indentUnit'
         },
         {
@@ -260,6 +309,11 @@ export function getEditorFields (config: ConfigOptions): PreferencesFieldset[] {
           type: 'checkbox',
           label: trans('Show formatting toolbar when text is selected'),
           model: 'editor.showFormattingToolbar'
+        },
+        {
+          type: 'checkbox',
+          label: trans('Show line numbers for Markdown files'),
+          model: 'editor.showMarkdownLineNumbers'
         },
         {
           type: 'checkbox',

@@ -23,6 +23,9 @@ export const mainOverride = EditorView.baseTheme({
     backgroundColor: 'transparent',
     cursor: 'auto'
   },
+  '&dark .cm-dropCursor': {
+    borderLeftColor: '#ddd'
+  },
   '.cm-scroller': {
     flexGrow: '1', // Ensure the content pushes possible panels towards the edge
     outline: '0' // Remove the outline
@@ -46,6 +49,10 @@ export const mainOverride = EditorView.baseTheme({
   '.cm-panel.cm-search': {
     userSelect: 'none' // prevent search panel text elements from being selected
   },
+  '&dark .cm-panel.cm-panel-lint ul [aria-selected]': {
+    // Fixes highlighting of unfocused selected lint panel items in dark mode.
+    backgroundColor: '#787878'
+  },
   // TOOLTIPS
   '.cm-tooltip': {
     padding: '4px',
@@ -54,8 +61,12 @@ export const mainOverride = EditorView.baseTheme({
   // Footnotes
   '.footnote, .footnote-ref-label': {
     verticalAlign: 'super',
-    fontSize: '80%'
+    fontSize: '0.8rem',
   },
+  // NOTE: Disabling because pre-rendered elements will not inherit this font size (see #5999)
+  // '.footnote-ref': {
+  //   fontSize: '0.8rem',
+  // },
   '.cm-emphasis': { fontStyle: 'italic' },
   // Provide the default YAML frontmatter indicator
   '.cm-yaml-frontmatter-start::after': {
@@ -73,12 +84,53 @@ export const mainOverride = EditorView.baseTheme({
     color: 'var(--grey-0)',
     backgroundColor: 'var(--grey-4)'
   },
+  '.cm-heading': {
+    textDecoration: 'none'
+  },
+  '.cm-header-1, .cm-header-2, .cm-header-3, .cm-header-4, .cm-header-5, .cm-header-6': { fontWeight: 'bold' },
+  // Don't increase font-size within blockquotes
+  ':not(.cm-quote).cm-header-1': { fontSize: '2em' },
+  ':not(.cm-quote).cm-header-2': { fontSize: '1.8em' },
+  ':not(.cm-quote).cm-header-3': { fontSize: '1.5em' },
+  ':not(.cm-quote).cm-header-4': { fontSize: '1.3em' },
+  ':not(.cm-quote).cm-header-5': { fontSize: '1em' },
+  ':not(.cm-quote).cm-header-6': { fontSize: '1em' },
+
+  /**
+   * Cursor blink animation.
+   *
+   * NOTE: We need to precisely override the way CodeMirror implements its
+   * blink-animation.
+   *
+   * 1.) CodeMirror switches between "cm-blink" and "cm-blink2" classes:
+   *     https://discuss.codemirror.net/t/custom-cursor-like-in-monaco-editor/5705/5
+   * 2.) It uses two identical animations for that.
+   * 3.) It uses a "step" animation to make the transition "harsh"
+   * 4.) For the animation source code, see:
+   *     https://github.com/codemirror/view/blob/main/src/theme.ts
+   *
+   * Our changes:
+   * * Remove the steps(1)-function to remove the harsh transitions.
+   * * Make the transition more smooth with a 15% opacity transition period.
+   */
+  '@keyframes cm-blink': { '0%': { opacity: 1 }, '10%': { opacity: 1 }, '25%': { opacity: 0 }, '60%': { opacity: 0 }, '75%': { opacity: 1 }, '100%': { opacity: 1 } },
+  '@keyframes cm-blink2': { '0%': { opacity: 1 }, '10%': { opacity: 1 }, '25%': { opacity: 0 }, '60%': { opacity: 0 }, '75%': { opacity: 1 }, '100%': { opacity: 1 } },
+  '&.cm-focused > .cm-scroller > .cm-cursorLayer': {
+    animation: 'cm-blink 1.2s infinite'
+  },
   // Highlight/mark elements
   '.cm-highlight': {
     backgroundColor: '#ffff0080',
   },
   '&dark .cm-highlight': {
     backgroundColor: '#ffff0060',
+  },
+  // Shown when a region is folded
+  '.cm-foldPlaceholder': {
+    backgroundColor: 'transparent',
+  },
+  '&dark .cm-foldPlaceholder': {
+    borderColor: '#888'
   }
 })
 

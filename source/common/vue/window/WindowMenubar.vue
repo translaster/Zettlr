@@ -4,8 +4,8 @@
       v-for="(item, idx) in menu"
       v-bind:key="idx"
       class="top-level-item"
-      v-on:mousedown.stop.prevent="getSubmenu(item.id, $event.target as HTMLElement)"
-      v-on:mouseenter.stop="maybeExchangeSubmenu(item.id, $event.target as HTMLElement)"
+      v-on:mousedown.stop.prevent="getSubmenu(item.id!, $event.target as HTMLElement)"
+      v-on:mouseenter.stop="maybeExchangeSubmenu(item.id!, $event.target as HTMLElement)"
     >
       {{ item.label }}
     </span>
@@ -27,8 +27,7 @@
  * END HEADER
  */
 
-import showPopupMenu from '@common/modules/window-register/application-menu-helper'
-import { type AnyMenuItem, type SubmenuItem } from '@dts/renderer/context'
+import showPopupMenu, { type AnyMenuItem, type SubmenuItem } from '@common/modules/window-register/application-menu-helper'
 import { ref, onBeforeMount } from 'vue'
 
 const ipcRenderer = window.ipc
@@ -42,14 +41,13 @@ const targetElement = ref<HTMLElement|null>(null)
 
 onBeforeMount(() => {
   // Listen to messages from the menu provider
-  ipcRenderer.on('menu-provider', (event, message) => {
-    const { command } = message
+  type MenuMessage = { command: 'application-menu', payload: SubmenuItem[] }
+  type SubmenuMessage = { command: 'application-submenu', payload: { id: string, submenu: SubmenuItem[] } }
 
+  ipcRenderer.on('menu-provider', (event, { command, payload }: MenuMessage|SubmenuMessage) => {
     if (command === 'application-menu') {
-      const { payload } = message
       menu.value = payload
     } else if (command === 'application-submenu') {
-      const { payload } = message
       showSubmenu(payload.submenu, payload.id)
     }
   })
@@ -136,13 +134,18 @@ function showSubmenu (items: AnyMenuItem[], attachTo: string): void {
 
 <style lang="less">
 // Styles for the menubar (for Windows and Linux)
+:root {
+  --fallback-title-bar-height: 31px;
+}
+
 #menubar {
-  height: 31px;
+  height: env(titlebar-area-height, var(--fallback-title-bar-height));
+  line-height: env(titlebar-area-height, var(--fallback-title-bar-height));
   width: 100%;
   // Use the system font with a somewhat smaller font-size
   font-family: inherit;
   font-size: 12px;
-  padding-left: 30px;
+  padding-left: env(titlebar-area-height, var(--fallback-title-bar-height));
   // Use the Zettlr logo as fixed background to enable branding in the menubar
   background-image: url("../../img/image-preview.png");
   background-position: left center;
@@ -156,15 +159,15 @@ function showSubmenu (items: AnyMenuItem[], attachTo: string): void {
   span.top-level-item {
     display: inline-block;
     padding: 3px;
-    height: 31px;
-    line-height: 31px;
+    height: env(titlebar-area-height, var(--fallback-title-bar-height));
+    line-height: env(titlebar-area-height, var(--fallback-title-bar-height));
     padding: 0 10px;
     // Don't drag the top-level menubar items
     -webkit-app-region: no-drag;
   }
 }
 
-body.win32 {
+body.win32, body.linux {
   #menubar {
     background-color: var(--system-accent-color, --c-primary);
     color: var(--system-accent-color-contrast);
@@ -173,22 +176,6 @@ body.win32 {
       // Since we can't be sure which colour the menu bar will have, simply add a transparent overlay
       background-color: rgba(0, 0, 0, .3);
     }
-  }
-}
-
-body.linux {
-  #menubar {
-    background-color: rgb(180, 180, 180);
-    color: rgb(30, 30, 30);
-
-    span.top-level-item:hover {
-      background-color: rgba(0, 0, 0, .3);
-    }
-  }
-
-  &.dark #menubar {
-    background-color: rgb(30, 30, 30);
-    color: rgb(235, 235, 235);
   }
 }
 </style>

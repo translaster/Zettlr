@@ -16,9 +16,10 @@ import { trans } from '@common/i18n-main'
 import { type MessageBoxOptions, dialog } from 'electron'
 import ZettlrCommand from './zettlr-command'
 import path from 'path'
+import type { AppServiceContainer } from 'source/app/app-service-container'
 
 export default class DirDelete extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'dir-delete')
   }
 
@@ -27,7 +28,7 @@ export default class DirDelete extends ZettlrCommand {
     * @param {String} evt The event name
     * @param  {Object} arg An object containing hash of containing and name of new dir.
     */
-  async run (evt: string, arg: any): Promise<boolean> {
+  async run (evt: string, arg: { path: string }): Promise<boolean> {
     const dirName = path.basename(arg.path)
     const options: MessageBoxOptions = {
       type: 'warning',
@@ -49,7 +50,7 @@ export default class DirDelete extends ZettlrCommand {
     try {
       await this._app.fsal.removeDir(arg.path)
     } catch (err: any) {
-      this._app.log.error(err.message, err)
+      this._app.log.error(err.message as string, err)
       return false
     }
 

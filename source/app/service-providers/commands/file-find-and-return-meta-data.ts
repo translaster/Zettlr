@@ -16,13 +16,17 @@
 import extractYamlFrontmatter from '@common/util/extract-yaml-frontmatter'
 import ZettlrCommand from './zettlr-command'
 import type { MDFileDescriptor } from '@dts/common/fsal'
+import type { AppServiceContainer } from 'source/app/app-service-container'
 
 const MAX_FILE_PREVIEW_LENGTH = 300
 const MAX_FILE_PREVIEW_LINES = 10
 
 function previewTitleGenerator (userConfig: string, descriptor: MDFileDescriptor): string {
-  if (userConfig.includes('title')&& descriptor.yamlTitle !== undefined) return descriptor.yamlTitle
-  else if (userConfig.includes('heading') && descriptor.firstHeading !== null) return descriptor.firstHeading
+  if (userConfig.includes('title')&& descriptor.yamlTitle !== undefined) {
+    return descriptor.yamlTitle
+  } else if (userConfig.includes('heading') && descriptor.firstHeading !== null) {
+    return descriptor.firstHeading
+  }
   return descriptor.name
 }
 
@@ -35,7 +39,7 @@ export interface FindFileAndReturnMetadataResult {
 }
 
 export default class FilePathFindMetaData extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, [ 'find-exact', 'file-find-and-return-meta-data' ])
   }
 
@@ -53,7 +57,7 @@ export default class FilePathFindMetaData extends ZettlrCommand {
     // The filename can contain a `#`, indicating a specified heading in the target file
     const filename = arg.includes('#') ? arg.slice(0, arg.indexOf('#')) : arg
     // Quick'n'dirty command to return the Meta descriptor for the given query
-    const descriptor = this._app.workspaces.findExact(filename)
+    const descriptor = await this._app.fsal.findExact(filename)
     if (descriptor === undefined) {
       return undefined
     }

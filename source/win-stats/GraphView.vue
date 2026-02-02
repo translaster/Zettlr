@@ -47,7 +47,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { type GraphArc, type GraphVertex, type LinkGraph } from '@dts/common/graph'
 import * as d3 from 'd3'
 import Checkbox from '@common/vue/form/elements/CheckboxControl.vue'
 import ButtonElement from '@common/vue/form/elements/ButtonControl.vue'
@@ -56,7 +55,7 @@ import SelectElement from '@common/vue/form/elements/SelectControl.vue'
 import TextElement from '@common/vue/form/elements/TextControl.vue'
 import tippy from 'tippy.js'
 import { type SimulationNodeDatum } from 'd3'
-import DirectedGraph from '@providers/links/directed-graph'
+import DirectedGraph, { type GraphArc, type GraphVertex, type LinkGraph } from './directed-graph'
 import { type MDFileDescriptor } from '@dts/common/fsal'
 import type { DocumentManagerIPCAPI } from 'source/app/service-providers/documents'
 
@@ -85,7 +84,11 @@ const zoomFactor = ref(1)
 const graphElement = ref<d3.Selection<SVGSVGElement, undefined, null, undefined>|null>(null)
 const simulation = ref<d3.Simulation<d3.SimulationNodeDatum, undefined>|null>(null)
 // Add an observer to resize the SVG element as necessary
-const controlsObserver = new ResizeObserver(updateGraphSize)
+const controlsObserver = new ResizeObserver(() => {
+  requestAnimationFrame(() => {
+    updateGraphSize()
+  })
+})
 
 const selectableComponents = computed(() => {
   const ret: Record<string, string> = {

@@ -12,10 +12,11 @@
  * END HEADER
  */
 
+import type { AppServiceContainer } from 'source/app/app-service-container'
 import ZettlrCommand from './zettlr-command'
 
 export default class UpdateUserDictionary extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'update-user-dictionary')
   }
 
@@ -25,11 +26,7 @@ export default class UpdateUserDictionary extends ZettlrCommand {
     * @param  {Object} arg An array containing a new user dictionary.
     * @return {Boolean} Whether or not the call succeeded
     */
-  async run (evt: string, arg: any): Promise<boolean> {
-    if (!Array.isArray(arg)) {
-      return false
-    }
-
+  async run (evt: string, arg: string[]): Promise<boolean> {
     return this._app.dictionary.setUserDictionary(arg)
   }
 }

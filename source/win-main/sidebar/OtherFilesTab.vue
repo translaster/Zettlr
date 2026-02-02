@@ -26,9 +26,10 @@
           v-bind:key="idx"
           class="attachment"
           draggable="true"
+          href="#"
           v-bind:data-link="attachment.path"
           v-bind:title="attachment.path"
-          v-bind:href="makeValidUri(attachment.path)"
+          v-on:click.prevent="handleClick(attachment.path)"
           v-on:dragstart="handleDragStart($event, attachment.path)"
         >
           <img v-if="hasPreview(attachment.path)" v-bind:src="getPreviewImageData(attachment.path)">
@@ -47,57 +48,53 @@
 <script setup lang="ts">
 import { trans } from '@common/i18n-renderer'
 import makeValidUri from '@common/util/make-valid-uri'
-import { type OtherFileDescriptor } from '@dts/common/fsal'
+import { type AnyDescriptor } from '@dts/common/fsal'
 import { ClarityIcons } from '@cds/core/icon'
-import { computed } from 'vue'
-import { useConfigStore, useDocumentTreeStore, useWorkspacesStore } from 'source/pinia'
-import { pathDirname, isAbsolutePath, resolvePath } from 'source/common/util/renderer-path-polyfill'
+import { computed, ref, toRef, watch } from 'vue'
+import { useConfigStore, useDocumentTreeStore } from 'source/pinia'
+import { pathDirname } from 'source/common/util/renderer-path-polyfill'
+import { hasImageExt } from 'source/common/util/file-extention-checks'
+import { useWorkspaceStore } from 'source/pinia/workspace-store'
 
-const IMAGE_RE = /\.(?:png|jpe?g|svg|bmp|webp|gif)$/
+const ipcRenderer = window.ipc
+
+const searchParams = new URLSearchParams(window.location.search)
+const windowId = searchParams.get('window_id')
+
+if (windowId === null) {
+  throw new Error('windowID was null')
+}
 
 const configStore = useConfigStore()
 const documentTreeStore = useDocumentTreeStore()
-const workspacesStore = useWorkspacesStore()
+const workspaceStore = useWorkspaceStore()
 
 const otherFilesLabel = trans('Other files')
 const openDirLabel = trans('Open directory')
 const noAttachmentsMessage = trans('No other files')
 
-const attachments = computed<Array<{ path: string, files: OtherFileDescriptor[] }>>(() => {
-  const activeFile = documentTreeStore.lastLeafActiveFile
-  if (activeFile === undefined) {
-    return [] as any
+const children = ref<AnyDescriptor[]>([])
+
+watch(toRef(documentTreeStore.lastLeafActiveFile), value => {
+  if (value === undefined) {
+    children.value = []
+    return
   }
 
-  const currentDir = workspacesStore.getDir(pathDirname(activeFile.path))
-  if (currentDir === undefined) {
-    return []
+  const descriptor = workspaceStore.descriptorMap.get(pathDirname(value.path))
+  if (descriptor === undefined) {
+    children.value = []
+    return
   }
 
-  const extensions = configStore.config.attachmentExtensions
-
-  const files = currentDir.children
-    .filter((child): child is OtherFileDescriptor => child.type === 'other')
-    .filter(attachment => extensions.includes(attachment.ext))
-
-  const att = [{ path: trans('Current folder'), files }]
-
-  const assetsDir = configStore.config.editor.defaultSaveImagePath.trim()
-
-  const assetsDescriptor = isAbsolutePath(assetsDir)
-    ? workspacesStore.getDir(assetsDir)
-    : workspacesStore.getDir(resolvePath(currentDir.path, assetsDir))
-
-  if (assetsDescriptor !== undefined) {
-    const files = assetsDescriptor.children
-      .filter((child): child is OtherFileDescriptor => child.type === 'other')
-      .filter(attachment => extensions.includes(attachment.ext))
-
-    att.push({ path: assetsDir, files })
-  }
-
-  return att
+  ipcRenderer.invoke('fsal', { command: 'get-descriptor', payload: descriptor.path })
+    .then(childDescriptors => {
+      children.value = childDescriptors
+    })
+    .catch(err => console.error(err))
 })
+
+const attachments = computed(() => workspaceStore.otherFiles)
 
 /**
  * Adds additional data to the dragevent
@@ -121,6 +118,23 @@ function getIcon (ext: string): string {
   }
 }
 
+function handleClick (filePath: string) {
+  if (hasImageExt(filePath) && configStore.config.files.images.openWith === 'zettlr') {
+    // Open this image in Zettlr
+    ipcRenderer.invoke('documents-provider', {
+      command: 'open-file',
+      // We leave leafId undefined
+      payload: { path: filePath, windowId }
+    })
+      .catch(e => console.error(e))
+  } else {
+    // Open the file externally (again, NOTE, this only works because main
+    // intercepts every navigation attempt).
+    window.location.href = makeValidUri(filePath)
+  }
+
+}
+
 /**
  * Returns true for any attachments that Zettlr can show a preview for
  *
@@ -129,7 +143,7 @@ function getIcon (ext: string): string {
  * @return  {boolean}                  Returns true for previewable attachments
  */
 function hasPreview (attachmentPath: string): boolean {
-  if (IMAGE_RE.test(attachmentPath)) {
+  if (hasImageExt(attachmentPath)) {
     return true
   }
 
@@ -145,7 +159,7 @@ function hasPreview (attachmentPath: string): boolean {
  * @return  {string}                  The image src attribute's contents
  */
 function getPreviewImageData (attachmentPath: string): string {
-  if (IMAGE_RE.test(attachmentPath)) {
+  if (hasImageExt(attachmentPath)) {
     return makeValidUri(attachmentPath) // Can be used (almost) as-is
   }
 

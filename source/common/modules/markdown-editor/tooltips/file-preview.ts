@@ -32,7 +32,7 @@ const ipcRenderer = window.ipc
 async function filePreviewTooltip (view: EditorView, pos: number, side: 1 | -1): Promise<Tooltip|null> {
   const nodeAt = syntaxTree(view.state).resolve(pos, side)
 
-  if (![ 'ZknLinkContent', 'ZknLinkPipe', 'ZknLink', 'ZknLinkTitle' ].includes(nodeAt.type.name)) {
+  if (![ 'ZknLink', 'ZknLinkContent', 'ZknLinkTitle', 'ZknLinkPipe', 'ZknLinkMark',  ].includes(nodeAt.type.name)) {
     return null
   }
 
@@ -94,11 +94,14 @@ function getPreviewElement (metadata: FindFileAndReturnMetadataResult, linkConte
 
   // basePath is needed to convert any relative URLs into absolute ones
   const basePath = pathDirname(metadata.filePath)
-  const html = md2html(
+  content.textContent = trans('Generating preview…')
+
+  // Start the MD->HTML conversion ...
+  md2html(
     metadata.previewMarkdown,
-    window.getCitationCallback(CITEPROC_MAIN_DB),
-    zknLinkFormat,
     {
+      zknLinkFormat,
+      onCitation: window.getCitationCallback(CITEPROC_MAIN_DB),
       // Convert the image links to absolute (if necessary)
       onImageSrc (src) {
         const isDataUrl = /^data:[a-zA-Z0-9/;=]+(?:;base64){0,1},.+/.test(src)
@@ -110,24 +113,27 @@ function getPreviewElement (metadata: FindFileAndReturnMetadataResult, linkConte
       }
     }
   )
-
-  content.innerHTML = sanitizeHtml(html, {
-    // These options basically translate into: Allow nothing but bare metal tags
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img']),
-    disallowedTagsMode: 'escape',
-    allowedIframeDomains: [],
-    allowedIframeHostnames: [],
-    allowedScriptDomains: [],
-    allowedSchemes: sanitizeHtml.defaults.allowedSchemes.concat(['safe-file']),
-    allowedScriptHostnames: [],
-    allowVulnerableTags: false
-  })
+    .then(html => {
+      // ... and then apply it to the content element.
+      content.innerHTML = sanitizeHtml(html, {
+        // These options basically translate into: Allow nothing but bare metal tags
+        allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img']),
+        disallowedTagsMode: 'escape',
+        allowedIframeDomains: [],
+        allowedIframeHostnames: [],
+        allowedScriptDomains: [],
+        allowedSchemes: sanitizeHtml.defaults.allowedSchemes.concat(['safe-file']),
+        allowedScriptHostnames: [],
+        allowVulnerableTags: false
+      })
+    })
+    .catch(err => console.error(err))
 
   const meta = document.createElement('div')
   meta.classList.add('metadata')
   meta.innerHTML = `${trans('Word count')}: ${metadata.wordCount}`
   meta.innerHTML += '<br>'
-  meta.innerHTML += `${trans('Modified')}: ${formatDate(metadata.modtime, window.config.get('appLang'))}`
+  meta.innerHTML += `${trans('Modified')}: ${formatDate(metadata.modtime, window.config.get('appLang') as string)}`
 
   const actions = document.createElement('div')
   actions.classList.add('actions')

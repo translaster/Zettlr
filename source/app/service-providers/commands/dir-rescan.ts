@@ -12,10 +12,11 @@
  * END HEADER
  */
 
+import type { AppServiceContainer } from 'source/app/app-service-container'
 import ZettlrCommand from './zettlr-command'
 
 export default class DirRescan extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'rescan-dir')
   }
 
@@ -24,7 +25,8 @@ export default class DirRescan extends ZettlrCommand {
     * @param {String} evt The event name
     * @param  {Object} arg The path of the descriptor
     */
-  async run (evt: string, arg: any): Promise<void> {
-    await this._app.workspaces.rescanForDirectory(arg.path)
+  async run (event: string, _arg: any): Promise<void> {
+    // DEBUG: DEPRECATED
+    throw new Error('rescanForDirectory not re-implemented')
   }
 }

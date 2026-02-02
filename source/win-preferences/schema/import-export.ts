@@ -65,6 +65,17 @@ export function getImportExportFields (): PreferencesFieldset[] {
           label: trans('Use Zettlr\'s internal Pandoc for exports'),
           model: 'export.useBundledPandoc'
         },
+        {
+          type: 'checkbox',
+          label: trans('Automatically open successfully exported files'),
+          model: 'export.autoOpenExportedFiles'
+        },
+        {
+          type: 'checkbox',
+          label: trans('Enforce highlight extension on export'),
+          info: trans('When enabled, Zettlr will automatically enable the "mark"-extension when exporting Markdown files.'),
+          model: 'export.enforceMarkSupport'
+        },
         { type: 'separator' },
         {
           type: 'checkbox',
@@ -103,6 +114,7 @@ export function getImportExportFields (): PreferencesFieldset[] {
     },
     {
       title: trans('Custom export commands'),
+      infoString: trans('Specify custom commands to run the exporter with. Each command receives as its first argument the file or project folder to be exported.'),
       group: PreferencesGroups.ImportExport,
       help: undefined, // TODO
       fields: [
@@ -111,7 +123,6 @@ export function getImportExportFields (): PreferencesFieldset[] {
           valueType: 'record',
           keyNames: [ 'displayName', 'command' ],
           columnLabels: [ trans('Display name'), trans('Command') ],
-          label: trans('Enter custom commands to run the exporter with. Each command receives as its first argument the file or project folder to be exported.'),
           model: 'export.customCommands',
           deletable: true,
           searchable: true,

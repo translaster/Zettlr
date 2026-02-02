@@ -48,7 +48,7 @@
  * END HEADER
  */
 
-import PopoverWrapper from './PopoverWrapper.vue'
+import PopoverWrapper from '@common/vue/PopoverWrapper.vue'
 import TextControl from '@common/vue/form/elements/TextControl.vue'
 import TabBar, { type TabbarControl } from '@common/vue/TabBar.vue'
 import { trans } from '@common/i18n-renderer'
@@ -121,6 +121,15 @@ function searchAndClose (tagName: string): void {
 body {
   .tag-cloud {
     padding: 5px;
+
+    h3 {
+      text-align: center;
+      padding-bottom: 5px;
+    }
+    .system-tablist,
+    .form-control {
+      padding: 5px;
+    }
 
     .tag {
       display: inline-block;

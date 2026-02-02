@@ -19,23 +19,42 @@
       class="editor-container"
       v-on:drop="handleDrop($event, 'editor')"
     >
-      <template v-for="file in openFiles" v-bind:key="file.path">
+      <template v-if="activeFileDescriptor !== undefined">
         <!--
           Teleport the correct editor that needs to be in distraction free
           outside the DOM structure to have it render on top of everything else.
         -->
-        <Teleport to="div#window-content" v-bind:disabled="!distractionFree || activeFile?.path !== file.path">
-          <MainEditor
-            v-show="activeFile?.path === file.path"
-            v-bind:file="file"
-            v-bind:distraction-free="distractionFree && activeFile?.path === file.path"
+        <Teleport to="div#window-content" v-bind:disabled="!distractionFree">
+          <ImageViewer
+            v-if="hasImageExt(activeFileDescriptor.path)"
+            v-bind:file="activeFileDescriptor"
             v-bind:leaf-id="leafId"
             v-bind:active-file="activeFile"
             v-bind:window-id="windowId"
             v-bind:editor-commands="editorCommands"
+          ></ImageViewer>
+          <PDFViewer
+            v-else-if="hasPDFExt(activeFileDescriptor.path)"
+            v-bind:file="activeFileDescriptor"
+            v-bind:leaf-id="leafId"
+            v-bind:active-file="activeFile"
+            v-bind:window-id="windowId"
+            v-bind:editor-commands="editorCommands"
+          ></PDFViewer>
+          <MainEditor
+            v-else
+            v-bind:file="activeFileDescriptor"
+            v-bind:distraction-free="distractionFree"
+            v-bind:leaf-id="leafId"
+            v-bind:active-file="activeFile"
+            v-bind:window-id="windowId"
+            v-bind:editor-commands="editorCommands"
+            v-bind:persistent-state-map="persistentStateMap"
             v-on:global-search="emit('globalSearch', $event)"
           ></MainEditor>
         </Teleport>
+      </template>
+      <template v-for="file in openFiles" v-bind:key="file.path">
       </template>
 
       <!-- Show empty pane if there are no files -->
@@ -53,7 +72,10 @@
         v-on:dragenter="handleDragEnter($event, 'top')"
         v-on:dragleave="handleDragLeave($event)"
       >
-        <cds-icon v-if="documentTabDragWhere === 'top'" shape="angle" direction="up"></cds-icon>
+        <cds-icon
+          v-if="documentTabDragWhere === 'top'"
+          shape="angle" size="xl" direction="up"
+        ></cds-icon>
       </div>
       <div
         v-if="documentTabDrag"
@@ -66,7 +88,10 @@
         v-on:dragenter="handleDragEnter($event, 'left')"
         v-on:dragleave="handleDragLeave($event)"
       >
-        <cds-icon v-if="documentTabDragWhere === 'left'" shape="angle" direction="left"></cds-icon>
+        <cds-icon
+          v-if="documentTabDragWhere === 'left'"
+          shape="angle" size="xl" direction="left"
+        ></cds-icon>
       </div>
       <div
         v-if="documentTabDrag"
@@ -79,7 +104,10 @@
         v-on:dragenter="handleDragEnter($event, 'bottom')"
         v-on:dragleave="handleDragLeave($event)"
       >
-        <cds-icon v-if="documentTabDragWhere === 'bottom'" shape="angle" direction="down"></cds-icon>
+        <cds-icon
+          v-if="documentTabDragWhere === 'bottom'"
+          shape="angle" size="xl" direction="down"
+        ></cds-icon>
       </div>
       <div
         v-if="documentTabDrag"
@@ -92,7 +120,10 @@
         v-on:dragenter="handleDragEnter($event, 'right')"
         v-on:dragleave="handleDragLeave($event)"
       >
-        <cds-icon v-if="documentTabDragWhere === 'right'" shape="angle" direction="right"></cds-icon>
+        <cds-icon
+          v-if="documentTabDragWhere === 'right'"
+          shape="angle" size="xl" direction="right"
+        ></cds-icon>
       </div>
     </div>
   </div>
@@ -105,7 +136,11 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import DocumentTabs from './DocumentTabs.vue'
 import MainEditor from './MainEditor.vue'
 import { useDocumentTreeStore, useWindowStateStore } from 'source/pinia'
+import ImageViewer from './file-viewers/ImageViewer.vue'
+import { hasImageExt, hasPDFExt } from '@common/util/file-extention-checks'
+import PDFViewer from './file-viewers/PDFViewer.vue'
 import type { DocumentManagerIPCAPI } from 'source/app/service-providers/documents'
+import { type EditorViewPersistentState } from 'source/common/modules/markdown-editor'
 
 const ipcRenderer = window.ipc
 
@@ -124,6 +159,15 @@ type DragTargetAreas = 'editor'|'top'|'left'|'right'|'bottom'
 
 const emit = defineEmits<(e: 'globalSearch', query: string) => void>()
 
+// UNREFFED SCROLL MAP
+// Each individual editor pane has its own persistent state map so that the
+// editors can save their scroll positions, selections, etc. This enables us to
+// only display a single document, thus saving lots of memory, but at the same
+// time keep the feeling of a tabbed interface. The map is unique for each pane,
+// since users may have the same document open in two panes, and want one file
+// to be scrolled differently than the same file in a different pane.
+const persistentStateMap = new Map<string, EditorViewPersistentState>()
+
 const documentTabDrag = ref<boolean>(false)
 const documentTabDragWhere = ref<DragTargetAreas|undefined>(undefined)
 
@@ -140,6 +184,14 @@ const distractionFree = computed<boolean>(() => windowStateStore.distractionFree
 const node = computed<LeafNodeJSON|undefined>(() => documentTreeStore.paneData.find((leaf: LeafNodeJSON) => leaf.id === props.leafId))
 const activeFile = computed<OpenDocument|null>(() => node.value?.activeFile ?? null)
 const openFiles = computed<OpenDocument[]>(() => node.value?.openFiles ?? [])
+const activeFileDescriptor = computed(() => {
+  const af = activeFile.value
+  if (af === null) {
+    return undefined
+  }
+
+  return openFiles.value.find(d => d.path === af.path)
+})
 const hasNoOpenFiles = computed<boolean>(() => openFiles.value.length === 0)
 
 onMounted(() => {
@@ -234,7 +286,7 @@ function finishDrag (): void {
 
 <style lang="less">
 
-@dropzone-size: 60px;
+@dropzone-size: 120px;
 
 @keyframes caretup {
   from { margin-bottom: 0; opacity: 1; }
@@ -286,7 +338,7 @@ body {
         cds-icon { margin: 0; }
 
         &.dragover {
-          background-color: rgba(21, 61, 107, 0.5);
+          background-color: rgb(94 127 166 / 50%);
           box-shadow: 0px 0px 5px 0px rgba(0, 0, 0, .2);
           backdrop-filter: blur(2px);
         }

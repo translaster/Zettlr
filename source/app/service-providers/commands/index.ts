@@ -46,7 +46,7 @@ import TutorialOpen from './tutorial-open'
 import UpdateProjectProperties from './update-project-properties'
 import UpdateUserDictionary from './update-user-dictionary'
 import ProviderContract from '@providers/provider-contract'
-import type AppServiceContainer from 'source/app/app-service-container'
+import { type AppServiceContainer } from 'source/app/app-service-container'
 import type ZettlrCommand from './zettlr-command'
 import { clipboard, ipcMain, nativeImage } from 'electron'
 import enumLangFiles from '@common/util/enum-lang-files'
@@ -102,7 +102,11 @@ export default class CommandProvider extends ProviderContract {
 
     // Set up the command listener
     ipcMain.handle('application', async (event, { command, payload }) => {
-      return await this.run(command, payload)
+      if (typeof command === 'string') {
+        return await this.run(command, payload)
+      } else {
+        throw new Error(`[Commands] Could not run command "${String(command)}": Not a string`)
+      }
     })
   }
 
@@ -117,9 +121,7 @@ export default class CommandProvider extends ProviderContract {
   async run (command: string, payload: any): Promise<any> {
     // FIRST: Try to run a minimal command for which its own custom function
     // wouldn't make sense.
-    if (command === 'get-statistics-data') {
-      return this._app.workspaces.getStatistics()
-    } else if (command === 'get-descriptor') {
+    if (command === 'get-descriptor' && typeof payload === 'string') {
       if (await this._app.fsal.isFile(payload)) {
         return await this._app.fsal.getDescriptorForAnySupportedFile(payload)
       } else if (await this._app.fsal.isDir(payload)) {
@@ -160,7 +162,7 @@ export default class CommandProvider extends ProviderContract {
         clipboard.writeImage(img)
       }
       return true
-    } else if (command === 'get-file-contents') {
+    } else if (command === 'get-file-contents' && typeof payload === 'string') {
       // Some renderer's editor has requested a file
       return await this._app.fsal.loadAnySupportedFile(payload)
     } else if (command === 'open-preferences') {
@@ -171,7 +173,7 @@ export default class CommandProvider extends ProviderContract {
       return true
     } else if (command === 'open-update-window') {
       this._app.windows.showUpdateWindow()
-    } else if (command === 'open-project-preferences') {
+    } else if (command === 'open-project-preferences' && typeof payload === 'string') {
       this._app.windows.showProjectPropertiesWindow(payload)
     } else {
       // ELSE: If the command has not yet been found, try to run one of the

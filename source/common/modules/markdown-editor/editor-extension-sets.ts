@@ -23,7 +23,7 @@ import { bracketMatching, codeFolding, foldGutter, indentOnInput, indentUnit, St
 import { stex } from '@codemirror/legacy-modes/mode/stex'
 import { yaml } from '@codemirror/lang-yaml'
 import { search } from '@codemirror/search'
-import { Compartment, EditorState, type Extension } from '@codemirror/state'
+import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state'
 import {
   drawSelection,
   EditorView,
@@ -35,20 +35,18 @@ import {
 import { autocomplete } from './autocomplete'
 import { codeSyntaxHighlighter, markdownSyntaxHighlighter } from './theme/syntax'
 import markdownParser from './parser/markdown-parser'
-import { syntaxExtensions } from './parser/syntax-extensions'
 import { defaultContextMenu } from './plugins/default-context-menu'
 import { readabilityMode } from './plugins/readability'
 import { hookDocumentAuthority } from './plugins/remote-doc'
 import { lintGutter, linter } from '@codemirror/lint'
 import { spellcheck } from './linters/spellcheck'
 import { mdLint } from './linters/md-lint'
-import { countField } from './plugins/statistics-fields'
+import { countField, countPlugin } from './plugins/statistics-fields'
 import { tocField } from './plugins/toc-field'
 import { typewriter } from './plugins/typewriter'
 import { formattingToolbar, footnoteHover, filePreview, urlHover } from './tooltips'
 import { type EditorConfiguration, configField } from './util/configuration'
 import { highlightRanges } from './plugins/highlight-ranges'
-import { jsonFolding } from './code-folding/json'
 import { markdownFolding } from './code-folding/markdown'
 import { json, jsonParseLinter } from '@codemirror/lang-json'
 import { softwrapVisualIndent } from './plugins/visual-indent'
@@ -69,11 +67,14 @@ import { themeFrankfurtLight, themeFrankfurtDark } from './theme/frankfurt'
 import { themeKarlMarxStadtLight, themeKarlMarxStadtDark } from './theme/karl-marx-stadt'
 import { mainOverride } from './theme/main-override'
 import { highlightWhitespace } from './plugins/highlight-whitespace'
+import { showLineNumbers } from './plugins/line-numbers'
 import { tagClasses } from './plugins/tag-classes'
 import { autocompleteTriggerCharacter } from './autocomplete/snippets'
 import { defaultKeymap } from './keymaps/default'
 import { vimPlugin } from './plugins/vim-mode'
 import { projectInfoField } from './plugins/project-info-field'
+import { headingGutter } from './renderers/render-headings'
+import { codeTheme } from './renderers/render-code'
 
 /**
  * This interface describes the required properties which the extension sets
@@ -171,17 +172,17 @@ function getCoreExtensions (options: CoreExtensionOptions): Extension[] {
     darkMode({ darkMode: options.initialConfig.darkMode, ...themes[options.initialConfig.theme] }),
     // CODE FOLDING
     codeFolding(),
-    foldGutter(),
+    Prec.low(foldGutter()), // The fold gutter should appear next to the text content
     // HISTORY
     history(),
     // SELECTIONS
     // Overrides the default browser selection drawing, allows styling
-    drawSelection({ drawRangeCursor: false, cursorBlinkRate: 1000 }),
+    drawSelection({ drawRangeCursor: false, cursorBlinkRate: 1200 }),
     highlightWhitespace(options.initialConfig.highlightWhitespace),
     dropCursor(),
     EditorState.allowMultipleSelections.of(true),
     // Ensure the cursor never completely sticks to the top or bottom of the editor
-    EditorView.scrollMargins.of(_view => { return { top: 30, bottom: 30 } }),
+    // EditorView.scrollMargins.of(_view => { return { top: 30, bottom: 30 } }),
     search({ top: true }), // Add a search
     // TAB SIZES/INDENTATION -> Depend on the configuration field
     EditorState.tabSize.from(configField, (val) => val.indentUnit),
@@ -236,7 +237,20 @@ function getGenericCodeExtensions (options: CoreExtensionOptions): Extension[] {
     lineNumbers(),
     bracketMatching(),
     indentOnInput(),
-    codeSyntaxHighlighter()
+    codeSyntaxHighlighter(),
+    // NOTE January 26, 2026: We have to include the `codeTheme` plugin, because
+    // it defines the colors (and fonts) for the code editors. Somehow I forgot
+    // to include it here for MONTHS, and it never appeared problematic because
+    // once a Markdown file was loaded, the corresponding styles were also
+    // applied, rendering code files correctly. This only breaks when the last
+    // file open before closing Zettlr is a code file (and, by implication, that
+    // the very first file Zettlr loads when you open the app is a code file).
+    // In that case, the code file would look wrong, because the styles were
+    // never loaded. Because, obviously, the "code syntax highlighter" above
+    // only defines class names, but not the theme… To see where the confusion
+    // came from, head into the theme/syntax.ts and tell me you wouldn't have
+    // made the mistake given how the *Highlighter* was called :roll_eyes:
+    codeTheme
   ]
 }
 
@@ -311,11 +325,13 @@ export function getMarkdownExtensions (options: CoreExtensionOptions): Extension
     }),
     // ... which can then be styled with a highlighter
     markdownSyntaxHighlighter(),
-    syntaxExtensions, // Add our own specific syntax plugin
     renderers(options.initialConfig),
+    showLineNumbers(options.initialConfig.showMarkdownLineNumbers),
     mdLinterExtensions,
+    headingGutter,
     languageTool,
     // Some statistics we need for Markdown documents
+    countPlugin,
     countField,
     typewriter,
     distractionFree,
@@ -349,7 +365,6 @@ export function getMarkdownExtensions (options: CoreExtensionOptions): Extension
 export function getJSONExtensions (options: CoreExtensionOptions): Extension[] {
   return [
     ...getGenericCodeExtensions(options),
-    jsonFolding,
     json(),
     linter(jsonParseLinter())
   ]

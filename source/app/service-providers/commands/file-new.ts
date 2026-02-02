@@ -19,9 +19,10 @@ import sanitize from 'sanitize-filename'
 import generateFilename from '@common/util/generate-filename'
 import { app } from 'electron'
 import { hasMdOrCodeExt } from '@common/util/file-extention-checks'
+import type { AppServiceContainer } from 'source/app/app-service-container'
 
 export default class FileNew extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, ['file-new'])
   }
 
@@ -157,7 +158,7 @@ export default class FileNew extends ZettlrCommand {
       // Zettlr work fine (even though the editing should work flawlessly.).
       // Since at this point the events that add the file to the tree likely
       // haven't fired yet, we can check whether the parent directory exists.
-      if (this._app.workspaces.findDir(path.dirname(absPath)) === undefined) {
+      if ((await this._app.fsal.getAnyDirectoryDescriptor(path.dirname(absPath))) === undefined) {
         this._app.config.addPath(absPath)
       }
     } catch (err: any) {

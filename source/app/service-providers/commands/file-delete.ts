@@ -16,9 +16,10 @@ import { trans } from '@common/i18n-main'
 import { type MessageBoxOptions, dialog } from 'electron'
 import ZettlrCommand from './zettlr-command'
 import path from 'path'
+import type { AppServiceContainer } from 'source/app/app-service-container'
 
 export default class FileDelete extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'file-delete')
   }
 
@@ -28,7 +29,7 @@ export default class FileDelete extends ZettlrCommand {
     * @param  {Object} arg the parameters of the file to be deleted
     * @return {Boolean} Whether the file was successfully deleted.
     */
-  async run (evt: string, arg: any): Promise<boolean> {
+  async run (evt: string, arg: { path: string }): Promise<boolean> {
     const fileName = path.basename(arg.path)
     const options: MessageBoxOptions = {
       type: 'warning',

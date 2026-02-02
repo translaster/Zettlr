@@ -12,7 +12,7 @@
  * END HEADER
  */
 
-import { renderBlockWidgets } from './base-renderer'
+import { renderInlineWidgets } from './base-renderer'
 import { type SyntaxNode, type SyntaxNodeRef } from '@lezer/common'
 import { EditorView, WidgetType } from '@codemirror/view'
 import { type EditorState } from '@codemirror/state'
@@ -24,6 +24,8 @@ import clickAndSelect from './click-and-select'
 import { pathDirname } from '@common/util/renderer-path-polyfill'
 import { syntaxTree } from '@codemirror/language'
 import { parseLinkAttributes, type ParsedPandocLinkAttributes } from 'source/common/pandoc-util/parse-link-attributes'
+
+const ipcRenderer = window.ipc
 
 // This variable holds a base64 encoded placeholder image.
 const img404 = 'data:image/png;base64,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'
@@ -56,6 +58,23 @@ function resolveImageUrl (filePath: string, imageUrl: string): string {
   return isDataUrl(imageUrl) ? imageUrl : makeValidUri(imageUrl, basePath)
 }
 
+/**
+ * This function checks whether the provided size works with CSS. It returns
+ * undefined, if it doesn't recognize the size (e.g., `1\textwidth`), and the
+ * size but in lowercase if it does.
+ *
+ * @param   {string}            size  The arbitrary size argument
+ *
+ * @return  {string|undefined}        The normalized size if recognized, or undefined.
+ */
+function normalizeSize (size?: string): string|undefined {
+  if (size === undefined || !/[\d\.]+(?:cm|mm|in|px|pt|pc|em|ex|ch|rem|vw|vh|vmin|vmax|%)/i.test(size)) {
+    return undefined
+  }
+
+  return size.toLowerCase()
+}
+
 class ImageWidget extends WidgetType {
   constructor (
     readonly node: SyntaxNode,
@@ -82,9 +101,17 @@ class ImageWidget extends WidgetType {
     // Retrieve and apply the size constraints
     const { imagePreviewHeight, imagePreviewWidth } = view.state.field(configField)
     const defaultWidth = (!Number.isNaN(imagePreviewWidth)) ? `${imagePreviewWidth}%` : '100%'
-    const defaultHeight = (!Number.isNaN(imagePreviewHeight) && imagePreviewHeight < 100) ? `${imagePreviewHeight}vh` : ''
-    figure.style.maxWidth = this.data.width !== undefined ? `min(${this.data.width}, ${defaultWidth})` : defaultWidth
-    figure.style.maxHeight = this.data.height !== undefined ? `min(${this.data.height}, ${defaultHeight})` : defaultHeight
+    const defaultHeight = (!Number.isNaN(imagePreviewHeight)) ? `${imagePreviewHeight}vh` : '100vh'
+
+    // Normalize the local width/height arguments
+    const normWidth = normalizeSize(this.data.width)
+    const normHeight = normalizeSize(this.data.height)
+    // Generate maxWidth/height properties
+    const maxWidth = normWidth !== undefined ? `min(${normWidth}, ${defaultWidth})` : defaultWidth
+    const maxHeight = normHeight !== undefined ? `min(${normHeight}, ${defaultHeight})` : defaultHeight
+
+    figure.style.maxWidth = maxWidth
+    figure.style.maxHeight = maxHeight
 
     // Display a context menu with the current image node
     figure.addEventListener('contextmenu', (event) => {
@@ -98,10 +125,10 @@ class ImageWidget extends WidgetType {
     // IMG
     //////////////////////////////////////////
     const img = document.createElement('img')
-    // This ensures that overly tall images will not be cropped by a too-short
-    // figure, and instead scale down. The figure will also become narrower,
-    // accommodating only for the total width of the resized image.
-    img.style.maxHeight = this.data.width !== undefined ? `min(${this.data.width}, ${defaultWidth})` : defaultWidth
+    // We need to apply the same max width/height styles to the image as to the
+    // figure. Otherwise the image will be cropped.
+    img.style.maxWidth = maxWidth
+    img.style.maxHeight = maxHeight
     img.alt = this.altText
     img.title = this.imageTitle
 
@@ -197,11 +224,26 @@ class ImageWidget extends WidgetType {
     openExternally.setAttribute('title', trans('Open image externally'))
     openExternally.onclick = function (event) {
       event.stopPropagation()
-      // NOTE: We can only do this because the main process prevents any
-      // navigation, and will open the "URL" using the shell.
-      window.location.assign(
-        resolveImageUrl(view.state.field(configField).metadata.path, img.dataset.originalUrl ?? '')
+      const url = resolveImageUrl(
+        view.state.field(configField).metadata.path,
+        img.dataset.originalUrl ?? ''
       )
+
+      // Open in Zettlr if wanted. TODO: Maybe move this into the editor config?
+      if (window.config.get('files.images.openWith') === 'zettlr') {
+        const unencoded = decodeURIComponent(url).substring(12)
+        // On Windows, it likes to add a third slash at the beginning (because
+        // unlike UNIX, absolute paths start with a letter, not a slash)
+        const leadingSlash = unencoded.startsWith('/') && process.platform === 'win32'
+        const realPath = leadingSlash ? unencoded.substring(1) : unencoded
+        ipcRenderer
+          .invoke('documents-provider', { command: 'open-file', payload: { path: realPath } })
+          .catch(e => console.error(e))
+      } else {
+        // NOTE: We can only do this because the main process prevents any
+        // navigation, and will open the "URL" using the shell.
+        window.location.assign(url)
+      }
     }
 
     const openIcon = document.createElement('cds-icon')
@@ -265,26 +307,17 @@ function shouldHandleNode (node: SyntaxNodeRef): boolean {
 function createWidget (state: EditorState, node: SyntaxNodeRef): ImageWidget|undefined {
   // Get the actual link contents, extract title and URL and create a
   // replacement widget
-  const imgSource = state.sliceDoc(node.from, node.to)
-  const match = /(?<=\s|^)!\[(.*?)\]\((.+?(?:(?<= )"(.+)")?)\)/.exec(imgSource)
-  if (match === null) {
-    console.error(`Could not parse image from source: "${imgSource}"`)
+  const marks = node.node.getChildren('LinkMark')
+  const titleNode = node.node.getChild('LinkTitle')
+  const urlNode = node.node.getChild('URL')
+
+  if (urlNode === null || marks.length < 2) {
     return undefined
   }
 
-  // The image RE will give us the following groups:
-  // p1: The alternative text (in square brackets)
-  // p2: The complete contents of the round braces
-  // p3: If applicable, an image title (within round braces)
-  // p4: Anything in curly brackets (mostly commands for Pandoc)
-  const altText = match[1] ?? '' // Everything inside the square brackets
-  let url = match[2] ?? '' // The URL
-  const title = match[3] ?? altText // An optional title in quotes after the image
-
-  // Remove the "title" from the surrounding URL group, if applicable.
-  if (match[3] !== undefined) {
-    url = url.replace(`"${match[3]}"`, '').trim()
-  }
+  const alt = state.sliceDoc(marks[0].to, marks[1].from)
+  const title = titleNode === null ? alt : state.sliceDoc(titleNode.from, titleNode.to)
+  const url = state.sliceDoc(urlNode.from, urlNode.to)
 
   let data: ParsedPandocLinkAttributes = {}
   const nextSibling = node.node.nextSibling
@@ -298,7 +331,7 @@ function createWidget (state: EditorState, node: SyntaxNodeRef): ImageWidget|und
   }
 
   const resolvedImageSrc = resolveImageUrl(state.field(configField).metadata.path, url)
-  return new ImageWidget(node.node, title, url, resolvedImageSrc, altText, data)
+  return new ImageWidget(node.node, title, url, resolvedImageSrc, alt, data)
 }
 
 export const renderImages = [
@@ -357,5 +390,5 @@ export const renderImages = [
       }
     }
   }),
-  renderBlockWidgets(shouldHandleNode, createWidget)
+  renderInlineWidgets(shouldHandleNode, createWidget)
 ]

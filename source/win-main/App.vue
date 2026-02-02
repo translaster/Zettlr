@@ -2,11 +2,11 @@
   <WindowChrome
     v-bind:title="'Zettlr'"
     v-bind:titlebar="shouldShowTitlebar"
-    v-bind:menubar="true"
+    v-bind:menubar="shouldShowMenubar"
     v-bind:show-toolbar="shouldShowToolbar"
     v-bind:toolbar-labels="false"
     v-bind:toolbar-controls="toolbarControls"
-    v-bind:disable-vibrancy="!vibrancyEnabled"
+    v-bind:disable-vibrancy="!hasVibrancy"
     v-on:toolbar-toggle="handleToggle($event)"
     v-on:toolbar-click="handleClick($event)"
   >
@@ -163,7 +163,7 @@ import glassFile from './assets/glass.wav'
 import alarmFile from './assets/digital_alarm.mp3'
 import chimeFile from './assets/chime.mp3'
 import { type LeafNodeJSON } from '@dts/common/documents'
-import buildPipeTable from '@common/modules/markdown-editor/table-editor/build-pipe'
+import { buildPipeMarkdownTable } from '@common/util/build-pipe-markdown-table'
 import { type UpdateState } from '@providers/updates'
 import { type ToolbarControl } from '@common/vue/window/WindowToolbar.vue'
 import { useConfigStore, useDocumentTreeStore, useWindowStateStore } from 'source/pinia'
@@ -200,7 +200,7 @@ const windowId = searchParams.get('window_id')!
 const fileManagerVisible = ref(true)
 const mainSplitViewVisibleComponent = ref<'fileManager'|'globalSearch'>('fileManager')
 const isUpdateAvailable = ref(false)
-const vibrancyEnabled = ref(configStore.config.window.vibrancy)
+const hasVibrancy = computed(() => configStore.config.window.vibrancy && process.platform === 'darwin')
 
 // Ensure the app remembers the previous sidebar sizes
 const fileManagerSplitComponentInitialSize = ref<[number, number]>([ 20, 80 ])
@@ -292,7 +292,6 @@ const pomodoro = ref<PomodoroConfig>({
 export interface EditorCommands {
   jumpToLine: boolean
   moveSection: boolean
-  readabilityMode: boolean
   addKeywords: boolean
   replaceSelection: boolean
   executeCommand: boolean
@@ -303,7 +302,6 @@ export interface EditorCommands {
 const editorCommands = ref<EditorCommands>({
   jumpToLine: false,
   moveSection: false,
-  readabilityMode: false,
   addKeywords: false,
   replaceSelection: false,
   executeCommand: false,
@@ -318,11 +316,51 @@ const sidebarsBeforeDistractionfree = ref<{ fileManager: boolean, sidebar: boole
 const sidebarVisible = computed<boolean>(() => configStore.config.window.sidebarVisible)
 const activeFile = computed(() => documentTreeStore.lastLeafActiveFile)
 const shouldCountChars = computed<boolean>(() => configStore.config.editor.countChars)
+
+// Simple state machine to trigger which of the three shows up when. Below's the
+// corresponding truth table, which is relatively large, but by spotting some
+// patterns, we can see when which of the three Window Chrome elements shall be
+// shown.
+/*
+
+| Platform | Hide Toolbar in DF? | Is DF? | Is FS? | Titlebar | Menubar | Toolbar |
+|----------|---------------------|--------|--------|----------|---------|---------|
+| Linux    | False               | False  | False  | False    | !native | True    |
+| Linux    | False               | False  | True   | False    | !native | True    |
+| Linux    | False               | True   | False  | False    | !native | True    |
+| Linux    | False               | True   | True   | False    | !native | True    |
+| Linux    | True                | False  | False  | False    | !native | True    |
+| Linux    | True                | False  | True   | False    | !native | True    |
+| Linux    | True                | True   | False  | False    | !native | False   |
+| Linux    | True                | True   | True   | False    | !native | False   |
+| macOS    | False               | False  | False  | False    | False   | True    |
+| macOS    | False               | False  | True   | False    | False   | True    |
+| macOS    | False               | True   | False  | False    | False   | True    |
+| macOS    | False               | True   | True   | False    | False   | True    |
+| macOS    | True                | False  | False  | False    | False   | True    |
+| macOS    | True                | False  | True   | False    | False   | True    |
+| macOS    | True                | True   | False  | True     | False   | False   |
+| macOS    | True                | True   | True   | False    | False   | False   |
+| Windows  | False               | False  | False  | False    | True    | True    |
+| Windows  | False               | False  | True   | False    | True    | True    |
+| Windows  | False               | True   | False  | False    | True    | True    |
+| Windows  | False               | True   | True   | False    | True    | True    |
+| Windows  | True                | False  | False  | False    | True    | True    |
+| Windows  | True                | False  | True   | False    | True    | True    |
+| Windows  | True                | True   | False  | False    | True    | False   |
+| Windows  | True                | True   | True   | False    | True    | False   |
+
+*/
+
+// The titlebar shall be shown on the main window in only one single instance
+const shouldShowTitlebar = computed<boolean>(() => process.platform === 'darwin' && configStore.config.display.hideToolbarInDistractionFree && distractionFree.value)
+// The menubar is independent of other values; always shown on Windows, and on Linux only if native Appearance is off.
+const shouldShowMenubar = computed<boolean>(() => process.platform === 'win32' || (process.platform !== 'darwin' && !configStore.config.window.nativeAppearance))
+
+// Finally, the toolbar. That one is a bit more iffy. It is always shown, EXCEPT
+// Hide Toolbar is True and DistractionFree is True
 const shouldShowToolbar = computed<boolean>(() => !distractionFree.value || !configStore.config.display.hideToolbarInDistractionFree)
-// We need to display the titlebar in case the user decides to hide the toolbar.
-// The titlebar is much less distracting, but this way the user can at least
-// drag the window around.
-const shouldShowTitlebar = computed<boolean>(() => !shouldShowToolbar.value)
+
 const parsedDocumentInfo = computed<string>(() => {
   const info = windowStateStore.activeDocumentInfo
   if (info == null) {
@@ -439,13 +477,6 @@ const toolbarControls = computed<ToolbarControl[]>(() => {
       icon: 'export'
     },
     {
-      type: 'button',
-      id: 'toggle-readability',
-      title: trans('Toggle readability mode'),
-      icon: 'eye',
-      visible: getToolbarButtonDisplay('showToggleReadabilityButton')
-    },
-    {
       type: 'spacer',
       id: 'spacer-two',
       size: '1x'
@@ -523,6 +554,8 @@ const toolbarControls = computed<ToolbarControl[]>(() => {
       type: 'button',
       id: 'open-updater',
       title: trans('Update available'),
+      showLabel: true,
+      buttonText: trans('Update available'),
       icon: 'download',
       visible: isUpdateAvailable.value
     }
@@ -692,18 +725,11 @@ function editorSidebarSplitComponentResized (sizes: [number, number]): void {
 
 function insertTable (spec: { rows: number, cols: number }): void {
   // Generate a simple table based on the info, and insert it.
-  const ast: string[][] = []
-  const align: Array<'center'|'left'|'right'> = []
-  for (let i = 0; i < spec.rows; i++) {
-    const row: string[] = []
-    align.push('left')
-    for (let k = 0; k < spec.cols; k++) {
-      row.push('')
-    }
-    ast.push(row)
-  }
+  const align: Array<'center'|'left'|'right'|null> = Array(spec.cols).fill(null)
+  const row = (): string[] => Array(spec.cols).fill('')
+  const ast: string[][] = Array.from({ length: spec.rows }, row)
 
-  editorCommands.value.data = buildPipeTable(ast, align)
+  editorCommands.value.data = buildPipeMarkdownTable(ast, align)
   editorCommands.value.replaceSelection = !editorCommands.value.replaceSelection
 }
 
@@ -796,9 +822,7 @@ function toggleFileList (): void {
 }
 
 function handleClick (clickedID?: string): void {
-  if (clickedID === 'toggle-readability') {
-    editorCommands.value.readabilityMode = !editorCommands.value.readabilityMode
-  } else if (clickedID === 'root-open-workspaces') {
+  if (clickedID === 'root-open-workspaces') {
     ipcRenderer.invoke('application', { command: 'root-open-workspaces' })
       .catch(e => console.error(e))
   } else if (clickedID === 'open-preferences') {

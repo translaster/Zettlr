@@ -16,19 +16,19 @@
 // NOTE: This is the opposite of the parse-grid-table tester. The only difference
 // is that the grid table builder only uses up as much space as necessary, while
 // the parser can work with "too much" space well.
-import buildPipeTable from '../source/common/modules/markdown-editor/table-editor/build-pipe'
 import { deepStrictEqual } from 'assert'
-import { type ColAlignment } from '@common/modules/markdown-editor/table-editor/types'
+import { buildPipeMarkdownTable } from 'source/common/util/build-pipe-markdown-table'
 
-const table: Array<{ ast: string[][], colAlignments: ColAlignment[] }> = []
+const table: Array<{ ast: string[][], colAlignments: Array<'left'|'right'|'center'|null> }> = []
 const tableResults: string[] = []
 
 /** * * * * * * * * * * * * * * * * * *
 * TABLE ONE
 */
-tableResults.push(`|  |  |
-|--|--|
-|  |  |`)
+tableResults.push(`\
+|   |   |
+|:--|:--|
+|   |   |`)
 
 table.push({
   ast: [
@@ -41,10 +41,11 @@ table.push({
 /** * * * * * * * * * * * * * * * * * *
 * TABLE TWO
 */
-tableResults.push(`|  |  |  |  |
-|--|--|--|--|
-|  |  |  |  |
-|  |  |  |  |`)
+tableResults.push(`\
+|   |   |   |   |
+|:--|:--|:--|:--|
+|   |   |   |   |
+|   |   |   |   |`)
 
 table.push({
   ast: [
@@ -58,23 +59,40 @@ table.push({
 /** * * * * * * * * * * * * * * * * * *
 * TABLE THREE
 */
-tableResults.push(`| Right | Left  | Centered |
-|------:|-------|:--------:|
-| Col 1 | Col 2 | Col 3    |`)
+tableResults.push(`\
+| Left   | Centered |  Right |
+|:-------|:--------:|-------:|
+| Col. 1 |  Col. 2  | Col. 3 |`)
 
 table.push({
   ast: [
-    [ 'Right', 'Left', 'Centered' ],
-    [ 'Col 1', 'Col 2', 'Col 3' ]
+    [ 'Left', 'Centered', 'Right' ],
+    [ 'Col. 1', 'Col. 2', 'Col. 3' ]
   ],
-  colAlignments: [ 'right', 'left', 'center' ]
+  colAlignments: [ 'left', 'center', 'right' ]
+})
+
+/** * * * * * * * * * * * * * * * * * *
+* TABLE FOUR
+*/
+tableResults.push(`\
+| One | Two | Three | Four | Five |
+|:----|-----|:-----:|------|-----:|
+| 1   | 2   |   3   | 4    |    5 |`)
+
+table.push({
+  ast: [
+    [ 'One', 'Two', 'Three', 'Four', 'Five' ],
+    [ '1', '2', '3', '4', '5' ]
+  ],
+  colAlignments: [ 'left', null, 'center', null, 'right' ]
 })
 
 describe('TableEditor#buildGrid()', function () {
   for (let i = 0; i < table.length; i++) {
     it(`Should build test table ${i + 1} correctly`, function () {
       const { ast, colAlignments } = table[i]
-      deepStrictEqual(buildPipeTable(ast, colAlignments), tableResults[i])
+      deepStrictEqual(buildPipeMarkdownTable(ast, colAlignments), tableResults[i])
     })
   }
 })

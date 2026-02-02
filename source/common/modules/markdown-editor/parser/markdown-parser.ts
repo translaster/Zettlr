@@ -19,7 +19,8 @@ import {
   StreamLanguage,
   type LanguageSupport,
   type Language,
-  type LanguageDescription
+  type LanguageDescription,
+  foldNodeProp
 } from '@codemirror/language'
 
 // Import all the languages, first the "new" ones
@@ -66,18 +67,20 @@ import { diff } from '@codemirror/legacy-modes/mode/diff'
 import { octave } from '@codemirror/legacy-modes/mode/octave'
 import { lua } from '@codemirror/legacy-modes/mode/lua'
 import { pascal } from '@codemirror/legacy-modes/mode/pascal'
+import { nix } from '@replit/codemirror-lang-nix'
 
 // Additional parser
 import { citationParser } from './citation-parser'
-import { footnoteParser, footnoteRefParser } from './footnote-parser'
+import { footnoteComposite, footnoteParser, footnoteRefParser } from './footnote-parser'
 import { frontmatterParser, yamlCodeParse } from './frontmatter-parser'
 import { inlineMathParser, blockMathParser } from './math-parser'
-import { sloppyParser } from './sloppy-parser'
+import { pandocLinkParser } from './pandoc-link-parser'
 import { gridTableParser, pipeTableParser } from './pandoc-table-parser'
 import { type ZknLinkParserConfig, zknLinkParser } from './zkn-link-parser'
 import { pandocAttributesParser } from './pandoc-attributes-parser'
 import { highlightParser } from './highlight-parser'
 import { zknTagParser } from './zkn-tag-parser'
+import { pandocDivComposite, pandocDivParser, pandocSpanParser } from './pandoc-div-span-parser'
 
 const codeLanguages: Array<{ mode: Language|LanguageDescription|null, selectors: string[] }> = [
   {
@@ -115,6 +118,7 @@ const codeLanguages: Array<{ mode: Language|LanguageDescription|null, selectors:
   { mode: StreamLanguage.define(kotlin), selectors: [ 'kotlin', 'kt' ] },
   { mode: StreamLanguage.define(less), selectors: ['less'] },
   { mode: StreamLanguage.define(lua), selectors: ['lua'] },
+  { mode: nix().language, selectors: ['nix'] },
   { mode: StreamLanguage.define(objectiveC), selectors: [ 'objective-c', 'objectivec', 'objc' ] },
   { mode: StreamLanguage.define(octave), selectors: ['octave'] },
   { mode: StreamLanguage.define(pascal), selectors: ['pascal'] },
@@ -143,6 +147,15 @@ const codeLanguages: Array<{ mode: Language|LanguageDescription|null, selectors:
   { mode: javascript({ typescript: true }).language, selectors: [ 'typescript', 'ts' ] }
 ]
 
+// Add code folding to custom nodes
+const customFoldNodeProp = foldNodeProp.add(type => {
+  if (type.is('PandocDiv') || type.is('YAMLFrontmatter')) {
+    return (node, state) => ({ from: state.doc.lineAt(node.from).to, to: node.to })
+  }
+
+  return undefined
+})
+
 export interface MarkdownParserConfig {
   zknLinkParserConfig?: ZknLinkParserConfig
 }
@@ -165,9 +178,14 @@ export default function markdownParser (config?: MarkdownParserConfig): Language
         return null
       }
 
+      // Additional check: For simple info strings, we need to use the entire
+      // match, but if the user has opted for a fenced code attribute, we need
+      // to account for the dot in the beginning.
+      const infoLang = match[1].startsWith('.') ? match[1].slice(1) : match[1]
+
       // Return an adequate language
       for (const entry of codeLanguages) {
-        if (entry.selectors.includes(match[1])) {
+        if (entry.selectors.includes(infoLang)) {
           return entry.mode
         }
       }
@@ -176,6 +194,9 @@ export default function markdownParser (config?: MarkdownParserConfig): Language
     },
     addKeymap: false,
     extensions: {
+      props: [
+        customFoldNodeProp
+      ],
       // yamlCodeParse is a wrapper that scans the document for the existence of
       // a YAML frontmatter and then parses its contents. NOTE: Since a single
       // MarkdownConfig only accepts one parse, I could either add additional
@@ -183,6 +204,7 @@ export default function markdownParser (config?: MarkdownParserConfig): Language
       // options here, since "extensions" also takes an array.
       wrap: yamlCodeParse(),
       parseBlock: [
+        pandocDivParser,
         // This BlockParser parses YAML frontmatters
         frontmatterParser,
         // This BlockParser parses math blocks
@@ -193,40 +215,65 @@ export default function markdownParser (config?: MarkdownParserConfig): Language
       ],
       parseInline: [
         // Add inline parsers that add AST elements for various additional types
+        pandocSpanParser,
         inlineMathParser,
         footnoteParser,
         citationParser,
-        sloppyParser,
         zknLinkParser(config?.zknLinkParserConfig),
         zknTagParser,
+        pandocLinkParser,
         pandocAttributesParser,
-        highlightParser
+        highlightParser,
       ],
       // We have to notify the markdown parser about the additional Node Types
       // that the YAML block parser utilizes
       // NOTE: Changes here must be reflected in util/custom-tags.ts and theme/syntax.ts!
       defineNodes: [
-        { name: 'YAMLFrontmatter' },
+        { name: 'YAMLFrontmatter', block: true },
         { name: 'YAMLFrontmatterStart', style: customTags.YAMLFrontmatterStart },
         { name: 'YAMLFrontmatterEnd', style: customTags.YAMLFrontmatterEnd },
-        { name: 'Citation', style: customTags.Citation },
+        // Citation elements
+        { name: 'Citation', style: { 'Citation/...': customTags.Citation } },
+        { name: 'CitationMark', style: customTags.CitationMark },
+        { name: 'CitationPrefix', style: customTags.CitationPrefix },
+        { name: 'CitationSuppressAuthorFlag', style: customTags.CitationSuppressAuthorFlag },
+        { name: 'CitationAtSign', style: customTags.CitationAtSign },
+        { name: 'CitationCitekey', style: customTags.CitationCitekey },
+        { name: 'CitationLocator', style: customTags.CitationLocator },
+        { name: 'CitationSuffix', style: customTags.CitationSuffix },
         { name: 'HighlightMark', style: customTags.HighlightMark },
         // NOTE: The convention {TagName}/... means that the corresponding styles
         // from the syntax theme get assigned to all child nodes that are contained
         // within this node as well. The default is to only style otherwise "empty"
         // spans of plain text.
         { name: 'HighlightContent', style: { 'HighlightContent/...': customTags.HighlightContent } },
-        { name: 'Footnote', style: customTags.Footnote },
-        { name: 'FootnoteRef', style: customTags.FootnoteRef },
+        { name: 'Footnote', style:  { 'Footnote/...': customTags.Footnote }, },
+        {
+          name: 'FootnoteRef',
+          style: { 'FootnoteRef/...': customTags.FootnoteRef },
+          block: true,
+          composite: footnoteComposite,
+        },
         { name: 'FootnoteRefLabel', style: customTags.FootnoteRefLabel },
-        { name: 'FootnoteRefBody', style: customTags.FootnoteRefBody },
-        { name: 'ZknLink', style: customTags.ZknLink },
+        { name: 'ZknLink', style: { 'ZknLink/...': customTags.ZknLink } },
+        { name: 'ZknLinkMark', style: customTags.ZknLinkMark },
         { name: 'ZknLinkContent', style: customTags.ZknLinkContent },
         { name: 'ZknLinkTitle', style: customTags.ZknLinkTitle },
         { name: 'ZknLinkPipe', style: customTags.ZknLinkPipe },
-        { name: 'ZknTag', style: customTags.ZknTag },
-        { name: 'ZknTagContent', style: customTags.ZknTagContent },
-        { name: 'PandocAttribute', style: customTags.PandocAttribute }
+        { name: 'ZknTag', style: { 'ZknTag/...': customTags.ZknTag } },
+        { name: 'ZknTagMark', style: customTags.ZknTagMark },
+        { name: 'PandocAttribute', style: customTags.PandocAttribute },
+        { name: 'PandocAttributeMark', style: customTags.PandocAttributeMark },
+        {
+          name: 'PandocDiv',
+          block: true,
+          style: { 'PandocDiv/...': customTags.PandocDiv },
+          composite: pandocDivComposite
+        },
+        { name: 'PandocDivInfo', style: customTags.PandocDivInfo },
+        { name: 'PandocDivMark', style: customTags.PandocDivMark },
+        { name: 'PandocSpan', style: { 'PandocSpan/...': customTags.PandocSpan } },
+        { name: 'PandocSpanMark', style: customTags.PandocSpanMark },
       ]
     }
   })

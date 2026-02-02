@@ -53,7 +53,7 @@ import { nextSnippet, abortSnippet } from '../autocomplete/snippets'
 import {
   handleReplacement, handleBackspace, handleQuote
 } from '../commands/autocorrect'
-import { addNewFootnote } from '../commands/footnotes'
+import { addNewFootnote, selectFootnoteBeforeDelete } from '../commands/footnotes'
 import {
   maybeIndentList, maybeUnindentList, customMoveLineUp, customMoveLineDown
 } from '../commands/lists'
@@ -62,6 +62,9 @@ import {
   toggleHighlight
 } from '../commands/markdown'
 import { pasteAsPlain, copyAsHTML } from '../util/copy-paste-cut'
+import { addColAfter, addColBefore, moveNextCell, movePrevCell, swapNextCol, swapPrevCol } from '../table-editor/commands/columns'
+import { alignTables } from '../table-editor/commands/tables'
+import { addRowAfter, addRowBefore, moveNextRow, movePrevRow, swapNextRow, swapPrevRow } from '../table-editor/commands/rows'
 
 // Includes:
 // * defaultKeymap
@@ -69,6 +72,10 @@ import { pasteAsPlain, copyAsHTML } from '../util/copy-paste-cut'
 // * closeBracketsKeymap
 // * searchKeymap
 export function defaultKeymap (): Extension {
+  // TODO: Disable alignment commands until custom keymapping is implemented
+  // const alignLeft = setAlignment('left')
+  // const alignCenter = setAlignment('center')
+  // const alignRight = setAlignment('right')
   return keymap.of([
     // completionKeymap
     { key: 'Ctrl-Space', run: startCompletion },
@@ -95,21 +102,24 @@ export function defaultKeymap (): Extension {
     // Overload Tab, depending on context (priority high->low)
     { key: 'Tab', run: acceptCompletion },
     { key: 'Tab', run: nextSnippet },
+    { key: 'Tab', run: moveNextCell, shift: movePrevCell },
     { key: 'Tab', run: maybeIndentList, shift: maybeUnindentList },
 
     // Overload Enter
     { key: 'Enter', run: handleReplacement },
+    { key: 'Enter', run: moveNextRow, shift: movePrevRow },
     // If no replacement can be handled, the default should be newlineAndIndent
     { key: 'Enter', run: insertNewlineContinueMarkup },
     { key: 'Enter', run: insertNewlineAndIndent },
 
     // Overload Backspace
+    { key: 'Backspace', run: selectFootnoteBeforeDelete },
     { key: 'Backspace', run: deleteMarkupBackward },
     // closeBracketsKeymap
     { key: 'Backspace', run: deleteBracketPair },
     { key: 'Backspace', run: handleBackspace },
 
-    { key: 'Esc', run: abortSnippet },
+    { key: 'Escape', run: abortSnippet },
     { key: 'Space', run: handleReplacement },
 
     { key: 'Alt-ArrowUp', run: customMoveLineUp, shift: copyLineUp },
@@ -222,5 +232,18 @@ export function defaultKeymap (): Extension {
     { key: 'Mod-Delete', mac: 'Alt-Delete', run: deleteGroupForward },
     { mac: 'Mod-Backspace', run: deleteLineBoundaryBackward },
     { mac: 'Mod-Delete', run: deleteLineBoundaryForward },
+
+    // Table Editor Keys. These need to be the last, since they override some
+    // commands and need to only run if nothing equivalently mapped can be run
+    // within the corresponding cells.
+    // TODO: Disable alignment commands until custom keymapping is implemented
+    // { key: 'Ctrl-l', run: alignLeft, preventDefault: true },
+    // { key: 'Ctrl-c', run: alignCenter, preventDefault: true },
+    // { key: 'Ctrl-r', run: alignRight, preventDefault: true },
+    { key: 'Mod-Shift-a', run: v => alignTables(v, v.state.selection.main.head) },
+    { key: 'Alt-ArrowUp', run: swapPrevRow, shift: addRowBefore },
+    { key: 'Alt-ArrowDown', run: swapNextRow, shift: addRowAfter },
+    { key: 'Alt-ArrowRight', run: swapNextCol, shift: addColAfter },
+    { key: 'Alt-ArrowLeft', run: swapPrevCol, shift: addColBefore },
   ])
 }

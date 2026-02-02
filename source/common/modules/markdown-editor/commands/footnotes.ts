@@ -17,20 +17,28 @@
 // 2. Cmd-Click them to edit them in place
 // 3. And, obviously, add and remove them
 
-import { syntaxTree } from '@codemirror/language'
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import { type ChangeSpec } from '@codemirror/state'
 import { type EditorView } from '@codemirror/view'
 import { extractASTNodes, markdownToAST } from '@common/modules/markdown-utils'
 import { type Footnote, type FootnoteRef } from '@common/modules/markdown-utils/markdown-ast'
 
+/**
+ * A command that adds a new footnote at the current main selection.
+ *
+ * @param   {EditorView}  target  The editor view.
+ *
+ * @return  {boolean}             Whether the command ran.
+ */
 export function addNewFootnote (target: EditorView): boolean {
-  const ast = markdownToAST(target.state.sliceDoc())
+  const ast = markdownToAST(target.state.sliceDoc(), ensureSyntaxTree(target.state, target.state.doc.length))
   const identifiers = extractASTNodes(ast, 'Footnote') as Footnote[]
   const refs = extractASTNodes(ast, 'FootnoteRef') as FootnoteRef[]
   const changes: ChangeSpec[] = []
 
   // This is where our new footnote should be inserted
   let where = target.state.selection.main.from
+  const doc = target.state.doc
 
   // Check that the user isn't accidentally within a footnote.
   const nodeAt = syntaxTree(target.state).resolve(where, 0)
@@ -54,7 +62,7 @@ export function addNewFootnote (target: EditorView): boolean {
   }
 
   // We additionally need the position of where to put the corresponding ref.
-  let whereRef = target.state.doc.length // Default: end of document
+  let whereRef = doc.length // Default: end of document
   for (const ref of refs) {
     const id = parseInt(ref.label, 10)
     if (!/^\d+$/.test(ref.label) || id < newIdentifier) {
@@ -66,20 +74,33 @@ export function addNewFootnote (target: EditorView): boolean {
     break
   }
 
-  const hasRefBefore = refs.filter(ref => ref.to < whereRef).length > 0
-  const prevLineNo = target.state.doc.lineAt(whereRef).number - 1
-  const emptyLineBefore = target.state.doc.line(prevLineNo).text.trim() === ''
-  const isBeginningOfLine = target.state.doc.lineAt(whereRef).from === whereRef
+  const isEOF = whereRef === doc.length
+  const targetLine = doc.lineAt(whereRef).number
+  const hasRefBefore = refs.filter(ref => ref.to <= whereRef).length > 0
+  const isBeginningOfLine = doc.lineAt(whereRef).from === whereRef
+  const prevLineNo = isBeginningOfLine ? targetLine - 1 : targetLine
+  const emptyLineBefore = doc.line(prevLineNo).text.trim() === '' || isEOF
 
   // We don't need to add another newline if there is already an empty line
   // before, or if a ref ends just before this one. This keeps the footnote refs
   // separate from the main text body with a double line break, but keeps the
   // refs themselves tight.
-  const prefix = (emptyLineBefore || hasRefBefore) && isBeginningOfLine ? '' : '\n'
+  let prefix = ''
+  if ((!isBeginningOfLine && hasRefBefore) || (isBeginningOfLine && isEOF)) {
+    prefix = '\n' // Single newline between footnotes
+  } else if (!emptyLineBefore && !hasRefBefore) {
+    prefix = '\n\n' // Footnote paragraph should be separated by an empty line
+  } else if (hasRefBefore && !isBeginningOfLine) {
+    prefix = '\n'
+  } else if (isEOF && !isBeginningOfLine) {
+    prefix = '\n\n'
+  }
+
+  let suffix = isEOF ? '' : '\n'
 
   // Now we can add the first two changes that will insert the new footnote
   changes.push({ from: where, insert: `[^${newIdentifier}]` })
-  changes.push({ from: whereRef, insert: `${prefix}[^${newIdentifier}]: \n` })
+  changes.push({ from: whereRef, insert: `${prefix}[^${newIdentifier}]: ${suffix}` })
 
   // We need to maintain a tally of how many more or less characters will be
   // inserted AFTER the new footnote identifier and BEFORE the whereRef.
@@ -128,7 +149,34 @@ export function addNewFootnote (target: EditorView): boolean {
     // 3 = [^] (the identifier)
     // 2x the new number length
     // Any offset chars, since the selection must be in terms of characters AFTER the update
-    selection: { anchor: whereRef + 5 + prefix.length + 3 + String(newIdentifier).length * 2 + offsetChars }
+    selection: { anchor: whereRef + 5 + prefix.length + 3 + String(newIdentifier).length * 2 + offsetChars },
+    scrollIntoView: true
   })
   return true
+}
+
+/**
+ * This command should run on delete. It tests if there is a Footnote next to
+ * the cursor that would be deleted. If so, it first selects the footnote
+ * entirely. This serves two purposes: (a) footnote deletion happens for the
+ * entire node, and (b) a double-check to visually tell the user they are about
+ * to delete a footnote now.
+ *
+ * @param   {EditorView}  target  The editor view.
+ *
+ * @return  {boolean}             Whether the command did something.
+ */
+export function selectFootnoteBeforeDelete (target: EditorView): boolean {
+  if (!target.state.selection.main.empty) {
+    return false
+  }
+
+  const pos = target.state.selection.main.head
+  const node = syntaxTree(target.state).resolveInner(pos, -1)
+  if (node.type.name === 'Footnote' && node.to === pos) {
+    target.dispatch({ selection: { anchor: node.to, head: node.from } })
+    return true
+  }
+
+  return false
 }

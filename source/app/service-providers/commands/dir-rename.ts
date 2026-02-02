@@ -15,19 +15,21 @@
 import path from 'path'
 import ZettlrCommand from './zettlr-command'
 import sanitize from 'sanitize-filename'
+import type { AppServiceContainer } from 'source/app/app-service-container'
 
 export default class DirRename extends ZettlrCommand {
-  constructor (app: any) {
+  constructor (app: AppServiceContainer) {
     super(app, 'dir-rename')
   }
 
   /**
    * Rename a directory
-   * @param {String} evt The event name
-   * @param  {Object} arg An object containing hash of containing and name of new dir.
+   *
+   * @param  {string}  evt The event name
+   * @param  {any}     arg An object with the path for the source dir and the new directory name.
    */
-  async run (evt: string, arg: any): Promise<boolean> {
-    const sourceDir = this._app.workspaces.findDir(arg.path)
+  async run (evt: string, arg: { path: string, name: string }): Promise<boolean> {
+    const sourceDir = await this._app.fsal.getAnyDirectoryDescriptor(arg.path)
     if (sourceDir === undefined) {
       this._app.log.error('Could not rename directory: Not found.')
       return false
@@ -41,8 +43,8 @@ export default class DirRename extends ZettlrCommand {
     try {
       // Before renaming the dir, let's see if it is a workspace. Because if it
       // is, we have to close it first.
-      const { openPaths } = this._app.config.getConfig()
-      const isRoot = openPaths.includes(sourceDir.path)
+      const { openWorkspaces } = this._app.config.getConfig().app
+      const isRoot = openWorkspaces.includes(sourceDir.path)
 
       if (isRoot) {
         this._app.config.removePath(sourceDir.path)

@@ -13,10 +13,10 @@
  * END HEADER
  */
 
-// Import the main.less file which imports CSS for KaTeX, Clarity, Tippy.JS, and
+// Import the main.css file which imports CSS for KaTeX, Clarity, Tippy.JS, and
 // the geometry for the application. This will be added to the HTML by Webpack
 // automatically
-import './assets/main.less'
+import './assets/main.css'
 
 const ipcRenderer = window.ipc
 
@@ -41,7 +41,7 @@ export default function registerThemes (): void {
   })
 
   // Listen for custom CSS changes
-  ipcRenderer.on('css-provider', (evt, { command, payload }) => {
+  ipcRenderer.on('css-provider', (evt, { command, payload }: { command: 'get-custom-css-path', payload: string }) => {
     if (command === 'get-custom-css-path') {
       setCustomCss(payload)
     }
@@ -52,7 +52,7 @@ export default function registerThemes (): void {
 
   // Initial rendering of the Custom CSS
   ipcRenderer.invoke('css-provider', { command: 'get-custom-css-path' })
-    .then(cssPath => setCustomCss(cssPath))
+    .then((cssPath: string) => setCustomCss(cssPath))
     .catch(e => console.error(e))
 
   // Create the custom stylesheet which includes certain system colours which

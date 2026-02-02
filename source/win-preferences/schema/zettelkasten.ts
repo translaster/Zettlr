@@ -17,26 +17,28 @@ import { type PreferencesFieldset } from '../App.vue'
 import { PreferencesGroups } from './_preferences-groups'
 import type { ConfigOptions } from 'source/app/service-providers/config/get-config-template'
 
-export function getZettelkastenFields (config: ConfigOptions): PreferencesFieldset[] {
+export function getZettelkastenFields (_config: ConfigOptions): PreferencesFieldset[] {
   return [
     {
       title: trans('Zettelkasten IDs'),
+      infoString: trans('Specify how Zettlr generates new file IDs for your Zettelkasten, and enable Zettlr to detect them.'),
       group: PreferencesGroups.Zettelkasten,
       help: undefined, // TODO
       fields: [
         {
           type: 'text',
-          label: trans('Pattern for Zettelkasten IDs'),
-          info: trans('Uses ECMAScript regular expressions'),
-          model: 'zkn.idRE',
-          reset: '(\\d{14})' // Default enables the reset button
-        },
-        {
-          type: 'text',
-          label: trans('Pattern used to generate new IDs'),
+          label: trans('Pattern for generating new IDs'),
           model: 'zkn.idGen',
           reset: '%Y%M%D%h%m%s',
           info: trans('Available Variables: %s', '%Y, %y, %M, %D, %W, %h, %m, %s, %o, %X, %uuid4')
+        },
+        { type: 'separator' },
+        {
+          type: 'text',
+          label: trans('Pattern to detect Zettelkasten IDs'),
+          info: trans('Uses ECMAScript regular expressions'),
+          model: 'zkn.idRE',
+          reset: '(\\d{14})' // Default enables the reset button
         }
       ]
     },
@@ -47,19 +49,13 @@ export function getZettelkastenFields (config: ConfigOptions): PreferencesFields
       fields: [
         {
           type: 'checkbox',
-          label: trans('Link with filename only'),
-          model: 'zkn.linkFilenameOnly'
+          label: trans('Always use the file title as label for internal links'),
+          model: 'zkn.linkAddFileTitle'
         },
         {
-          type: 'radio',
-          label: trans('When linking files, add the document name …'),
-          model: 'zkn.linkWithFilename',
-          options: {
-            always: trans('Always'),
-            withID: trans('Only when linking using the ID'),
-            never: trans('Never')
-          },
-          disabled: config.zkn.linkFilenameOnly
+          type: 'checkbox',
+          label: trans('Use the file ID as link target if possible'),
+          model: 'zkn.linkWithIDIfPossible'
         },
         { type: 'separator' },
         {
@@ -89,17 +85,13 @@ export function getZettelkastenFields (config: ConfigOptions): PreferencesFields
           info: trans('The search string will match the content between the brackets: [[ ]].'),
           model: 'zkn.autoSearch'
         },
-        { type: 'separator' },
-        {
-          type: 'form-text',
-          display: 'sub-heading',
-          contents: trans('Automatically create non-existing files in this folder when following internal links')
-        },
-        {
-          type: 'form-text',
-          display: 'info',
-          contents: trans('For this to work, the folder must be open as a Workspace in Zettlr.')
-        },
+      ]
+    },
+    {
+      title: trans('Zettelkasten folder'),
+      infoString: trans('Choosing a Zettelkasten folder allows Zettlr to automatically create files when following links to not-yet-existing files. This folder must be open as a Workspace in Zettlr.'),
+      group: PreferencesGroups.Zettelkasten,
+      fields: [
         {
           type: 'directory',
           model: 'zkn.customDirectory',

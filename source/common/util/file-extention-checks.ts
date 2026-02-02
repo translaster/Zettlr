@@ -17,7 +17,7 @@
 
 export const MD_EXT = [ '.md', '.rmd', '.qmd', '.markdown', '.txt', '.mdx', '.mkd' ]
 export const CODE_EXT = [ '.tex', '.json', '.yaml', '.yml' ]
-export const IMG_EXT = [ '.jpg', '.jpeg', '.png', '.svg', '.webp', '.bmp', '.tiff' ]
+export const IMG_EXT = [ '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.bmp', '.tiff' ]
 export const PDF_EXT = ['.pdf']
 export const MS_OFFICE_EXT = [ '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx' ]
 export const OPEN_OFFICE_EXT = [ '.odt', '.ods', '.odp' ]
@@ -122,4 +122,18 @@ export function hasOpenOfficeExt (filePath: string): boolean {
  */
 export function hasDataExt (filePath: string): boolean {
   return hasExt(filePath, DATA_EXT)
+}
+
+/**
+ * Utility function that checks for *any* of the recognized file extensions
+ * Zettlr supports to some degree.
+ *
+ * @param   {string}   filePath  The file path
+ *
+ * @return  {boolean}            Whether the filePath has any recognized ext.
+ */
+export function hasAnyRecognizedFileExtension (filePath: string): boolean {
+  return hasMdOrCodeExt(filePath) || hasImageExt(filePath) ||
+    hasPDFExt(filePath) || hasOpenOfficeExt(filePath) ||
+    hasMSOfficeExt(filePath) || hasDataExt(filePath)
 }

@@ -18,11 +18,10 @@
 import EventEmitter from 'events'
 import path from 'path'
 import { constants as FSConstants } from 'fs'
-import { FSALCodeFile, FSALFile } from '@providers/fsal'
 import ProviderContract, { type IPCAPI } from '@providers/provider-contract'
 import broadcastIpcMessage from '@common/util/broadcast-ipc-message'
-import type AppServiceContainer from 'source/app/app-service-container'
-import { ipcMain, app, dialog, type BrowserWindow, type MessageBoxOptions } from 'electron'
+import { type AppServiceContainer } from '../../app-service-container'
+import { ipcMain, app, dialog, type BrowserWindow, type MessageBoxOptions, shell } from 'electron'
 import { DocumentTree, type DTLeaf } from './document-tree'
 import PersistentDataContainer from '@common/modules/persistent-data-container'
 import { type TabManager } from '@providers/documents/document-tree/tab-manager'
@@ -31,11 +30,13 @@ import { v4 as uuid4 } from 'uuid'
 import { type Update } from '@codemirror/collab'
 import { ChangeSet, Text } from '@codemirror/state'
 import type { CodeFileDescriptor, MDFileDescriptor } from '@dts/common/fsal'
-import { countChars, countWords } from '@common/util/counter'
+import { countAll } from '@common/util/counter'
 import { markdownToAST } from '@common/modules/markdown-utils'
 import isFile from '@common/util/is-file'
 import { trans } from '@common/i18n-main'
 import type FSALWatchdog from '@providers/fsal/fsal-watchdog'
+import { hasImageExt, hasMdOrCodeExt, hasPDFExt } from 'source/common/util/file-extention-checks'
+import isDir from 'source/common/util/is-dir'
 
 type DocumentWindows = Record<string, DocumentTree>
 type DocumentWindowsJSON = Record<string, BranchNodeJSON|LeafNodeJSON>
@@ -791,7 +792,39 @@ current contents from the editor somewhere else, and restart the application.`
    */
   public async openFile (windowId: string|undefined, leafId: string|undefined, filePath: string, newTab?: boolean): Promise<boolean> {
     if (!isFile(filePath)) {
+      // The renderer process essentially just throws paths at the documents
+      // provider when the user intents to open them. Users can also link
+      // folders, so we just quickly check for that, and open them (similar to
+      // non-Markdown files a few lines below).
+      if (isDir(filePath)) {
+        await shell.openPath(filePath)
+        return false
+      }
+
+      // Else: Whatever this is, it was not a proper path.
       throw new Error(`Could not open file ${filePath}: Not an existing file.`)
+    }
+
+    // Check if we can, and should, actually open the file in Zettlr. If not, we
+    // need to open it via the shell externally. NOTE: This check is, to varying
+    // degrees, implemented at the sources of opening-requests (read: mostly in
+    // the renderers). If you see this comment, and spot a place where we
+    // implemented this guard somewhere else, please refactor to simply attempt
+    // to open a file path with the documents provider and defer to this check
+    // here. Amend with any additional necessary checks from the other guards.
+    if (!hasMdOrCodeExt(filePath)) {
+      const { files } = this._app.config.get()
+      let shouldOpenExternally = true
+      if (hasImageExt(filePath) && files.images.openWith === 'zettlr') {
+        shouldOpenExternally = false
+      } else if (hasPDFExt(filePath) && files.pdf.openWith === 'zettlr') {
+        shouldOpenExternally = false
+      }
+
+      if (shouldOpenExternally) {
+        await shell.openPath(filePath)
+        return false
+      }
     }
 
     // If windowId is not provided, then use the last focused window
@@ -834,6 +867,13 @@ current contents from the editor somewhere else, and restart the application.`
 
     // After here, the document will in some way be opened.
     this._app.recentDocs.add(filePath)
+
+    const { openFiles, openWorkspaces } = this._app.config.get().app
+    if (!openFiles.includes(filePath) && openWorkspaces.every(p => !filePath.startsWith(p))) {
+      // The file just opened is outside the current opened roots -> add as a
+      // standalone root file.
+      this._app.config.addPath(filePath)
+    }
 
     if (leaf.tabMan.openFiles.map(x => x.path).includes(filePath)) {
       // File is already open -> simply set it as active
@@ -1201,7 +1241,7 @@ current contents from the editor somewhere else, and restart the application.`
    * concern.
    */
   private syncToConfig (): void {
-    const toSave: any = {}
+    const toSave: DocumentWindowsJSON = {}
     for (const key in this._windows) {
       toSave[key] = this._windows[key].toJSON()
     }
@@ -1488,9 +1528,11 @@ current contents from the editor somewhere else, and restart the application.`
 
     if (doc.descriptor.type === 'file') {
       // In case of an MD File increase the word or char count
+      const locale: string = this._app.config.get().appLang
       const ast = markdownToAST(content)
-      const newWordCount = countWords(ast)
-      const newCharCount = countChars(ast)
+      const counts = countAll(ast, locale)
+      const newWordCount = counts.words
+      const newCharCount = counts.chars
 
       this._app.stats.updateCounts(
         newWordCount - doc.lastSavedWordCount,
@@ -1505,15 +1547,13 @@ current contents from the editor somewhere else, and restart the application.`
 
     try {
       if (doc.descriptor.type === 'file') {
-        await FSALFile.save(
-          doc.descriptor,
-          content,
-          this._app.fsal.getMarkdownFileParser(),
-          null
-        )
+        const fileContents = doc.descriptor.bom + content.split('\n').join(doc.descriptor.linefeed)
+        await this._app.fsal.writeTextFile(doc.descriptor.path, fileContents)
+        doc.descriptor = await this._app.fsal.getDescriptorFor(doc.descriptor.path, false) as MDFileDescriptor
         await this.synchronizeDatabases() // The file may have gotten a library
       } else {
-        await FSALCodeFile.save(doc.descriptor, content, null)
+        await this._app.fsal.writeTextFile(doc.descriptor.path, content)
+        doc.descriptor = await this._app.fsal.getDescriptorFor(doc.descriptor.path, false) as CodeFileDescriptor
       }
     } catch (err: any) {
       dialog.showErrorBox(trans('Could not save file'), trans('Could not save file %s: %s', doc.descriptor.name, err.message))

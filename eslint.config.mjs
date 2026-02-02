@@ -71,6 +71,8 @@ export default [
 
       /////////////////////// END STYLISTIC RULES //////////////////////////////
 
+      ////////////////////////// TYPESCRIPT RULES //////////////////////////////
+
       // Enforce using the `type` keyword to import names when only used as
       // types. This is especially necessary when cross-importing interfaces and
       // APIs for use in IPC calls between renderers and main. Most modules rely
@@ -89,16 +91,19 @@ export default [
         prefer: 'type-imports', fixStyle: 'separate-type-imports'
       } ],
 
-      // We do use explicit anys at certain points
-      '@typescript-eslint/no-explicit-any': 'off',
+      // Currently, there are about 260 uses of `any`. NOTE January 19, 2026:
+      // Moved from "off" to "warn" to start making the type system more strict.
+      '@typescript-eslint/no-explicit-any': 'warn',
       // Avoid the use of `delete`
       '@typescript-eslint/no-dynamic-delete': 'error',
       // Disallow unused variables, except for when they are named "event",
       // start with an underscore, are errors in try-catch blocks, or
       // destructured arrays.
+      '@typescript-eslint/no-unused-expressions': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
+          // See https://typescript-eslint.io/rules/no-unused-vars/
           // Allow ignoring function arguments by prefixing it with _
           // Also, we often have unused event-arguments in event handler
           // functions because they are detached from the addEventListener calls
@@ -110,15 +115,49 @@ export default [
           destructuredArrayIgnorePattern: '.*'
         }
       ],
-      // See https://typescript-eslint.io/rules/no-unused-vars/
+
+      // Sometimes, it makes sense to return a void to save a line of code, so we
+      // keep this rule off.
+      '@typescript-eslint/no-confusing-void-expression': 'off',
+
+      // If we activate this rule, we have about 500 errors that there are no
+      // spaces around | operators. Hasn't been a problem until now, won't be
+      // one in the future.
+      '@typescript-eslint/space-infix-ops': 'off',
+      '@typescript-eslint/no-base-to-string': [
+        'error',
+        {
+          ignoredTypeNames: ['Text']
+        }
+      ],
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      // DEBUG: Turn a few errors into warnings after upgrading ESLint to >6.x
+      // This rule is difficult to disable right now; it interferes with the
+      // "no-null-assertion" rule, and it won't be an easy fix. We'll have to
+      // think about it.
+      '@typescript-eslint/non-nullable-type-assertion-style': 1,
+      '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'error',
+      '@typescript-eslint/strict-boolean-expressions': 'error',
+      // The following rule basically disallows use of `any`
+      '@typescript-eslint/no-unsafe-argument': 1,
+      // Mark forgotten awaits as errors
+      '@typescript-eslint/no-floating-promises': 'error',
+
+      /////////////////////// END TYPESCRIPT RULES /////////////////////////////
+
+      /////////////////////// ESLINT DEFAULT RULES /////////////////////////////
+
+      'curly': [ 'error', 'all' ],
 
       // The following rule-changes to JSStandard Coding Style are tradition,
       // as they were included with the default configuration of Atom's ESLint
       // plugin, so we'll keep them here for the time being.
       'prefer-const': 'off',
-      // Sometimes, it makes sense to return a void to save a line of code, so we
-      // keep this rule off.
-      '@typescript-eslint/no-confusing-void-expression': 'off',
+
+      ///////////////////// END ESLINT DEFAULT RULES ///////////////////////////
+
+      //////////////////////////// VUE RULES ///////////////////////////////////
+
       // Here follow vue-styles. While the short form is recommended
       // I tend to value verbose code. At least for now, discussion is
       // well received.
@@ -150,28 +189,9 @@ export default [
       // provided HTML to only contain safe tags. The only stuff we currently
       // put in there is translation strings, which we sanitise in the trans()
       // function. NOTE to keep this on my mind!
-      'vue/no-v-html': 'off',
+      'vue/no-v-html': 'off'
 
-      // If we activate this rule, we have about 500 errors that there are no
-      // spaces around | operators. Hasn't been a problem until now, won't be
-      // one in the future.
-      '@typescript-eslint/space-infix-ops': 'off',
-      '@typescript-eslint/no-base-to-string': [
-        'error',
-        {
-          ignoredTypeNames: ['Text']
-        }
-      ],
-      '@typescript-eslint/no-non-null-assertion': 'off',
-      // DEBUG: Turn a few errors into warnings after upgrading ESLint to >6.x
-      // This rule is difficult to disable right now; it interferes with the
-      // "no-null-assertion" rule, and it won't be an easy fix. We'll have to
-      // think about it.
-      '@typescript-eslint/non-nullable-type-assertion-style': 1,
-      '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'error',
-      '@typescript-eslint/strict-boolean-expressions': 'error',
-      // The following rule basically disallows use of `any`
-      '@typescript-eslint/no-unsafe-argument': 1
+      ////////////////////////// END VUE RULES /////////////////////////////////
     }
   }
 ]

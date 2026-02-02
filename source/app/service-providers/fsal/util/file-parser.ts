@@ -13,22 +13,25 @@
  * END HEADER
  */
 
-import { countChars, countWords } from '@common/util/counter'
+import { countAll } from '@common/util/counter'
 import type { MDFileDescriptor } from '@dts/common/fsal'
 import extractBOM from './extract-bom'
 import extractFileId from './extract-file-id'
 import { parse as parseYAML } from 'yaml'
 import {
-  markdownToAST as md2ast,
-  extractASTNodes
+  markdownToAST,
+  extractASTNodes,
+  extractTextnodes
 } from '@common/modules/markdown-utils'
 import type {
+  CitationNode,
   Heading,
   YAMLFrontmatter,
   ZettelkastenLink,
   ZettelkastenTag
 } from '@common/modules/markdown-utils/markdown-ast'
 import { extractLinefeed } from './extract-linefeed'
+import { getAppServiceContainer, isAppServiceContainerReady } from '../../../app-service-container'
 
 // Here are all supported variables for Pandoc:
 // https://pandoc.org/MANUAL.html#variables
@@ -47,8 +50,6 @@ const FRONTMATTER_VARS = [
 /**
  * Parses some Markdown `content` into the properties of the `file` descriptor.
  *
- * @param  {string}  linkStart    The link start as indicated by the user
- * @param  {string}  linkEnd      The link end as indicated by the user
  * @param  {string}  idREPattern  The ID RegExp pattern as indicated by the user
  *
  * @returns {Function}            A parser that can then be used to parse files
@@ -67,7 +68,7 @@ export default function getMarkdownFileParser (
     file.id = extractFileId(file.name, content, idREPattern)
 
     // Parse the file into our AST
-    const ast = md2ast(content)
+    const ast = markdownToAST(content)
 
     const tags = extractASTNodes(ast, 'ZettelkastenTag') as ZettelkastenTag[]
     file.tags = tags.map(tag => tag.value.toLowerCase())
@@ -75,15 +76,23 @@ export default function getMarkdownFileParser (
     const links = extractASTNodes(ast, 'ZettelkastenLink') as ZettelkastenLink[]
     file.links = links.map(link => link.target)
 
+    const citations = extractASTNodes(ast, 'Citation') as CitationNode[]
+    file.citekeys = citations.flatMap(node => node.parsedCitation.items.map(item => item.id))
+
     file.firstHeading = null
     const headings = extractASTNodes(ast, 'Heading') as Heading[]
     const firstH1 = headings.find(h => h.level === 1)
     if (firstH1 !== undefined) {
-      file.firstHeading = firstH1.content
+      const content = extractTextnodes(firstH1)
+      file.firstHeading = content.map(node => node.whitespaceBefore + node.value).join('').trim()
     }
 
-    file.wordCount = countWords(ast)
-    file.charCount = countChars(ast)
+    const locale: string | undefined = isAppServiceContainerReady() ? getAppServiceContainer().config.get('appLang') : undefined
+
+    const counts = countAll(ast, locale)
+
+    file.wordCount = counts.words
+    file.charCount = counts.chars
 
     // Reset frontmatter-related stuff
     file.yamlTitle = undefined
@@ -103,7 +112,7 @@ export default function getMarkdownFileParser (
         file.frontmatter = frontmatter
       }
 
-      for (const [ key, value ] of Object.entries(frontmatter)) {
+      for (const [ key, value ] of Object.entries(frontmatter as { [s: string]: unknown })) {
         // Only keep those values which Zettlr can understand
         if (FRONTMATTER_VARS.includes(key)) {
           file.frontmatter[key] = value

@@ -32,6 +32,7 @@ export interface EditorConfiguration {
   autocompleteSuggestEmojis: boolean
   autocorrect: AutocorrectOptions
   autoCloseBrackets: boolean
+  renderingMode: 'preview'|'raw'
   renderCitations: boolean
   renderIframes: boolean
   renderImages: boolean
@@ -41,6 +42,8 @@ export interface EditorConfiguration {
   renderHeadings: boolean
   renderTables: boolean
   renderEmphasis: boolean
+  renderPandoc: boolean
+  renderHorizontalRules: boolean
   imagePreviewWidth: number
   imagePreviewHeight: number
   idRE: string
@@ -49,7 +52,8 @@ export interface EditorConfiguration {
   indentWithTabs: boolean
   linkPreference: 'always'|'never'|'withID'
   zknLinkFormat: 'link|title'|'title|link'
-  linkFilenameOnly: boolean
+  zknAddFileTitle: boolean
+  linkWithIDIfPossible: boolean
   metadata: {
     path: string
     id: string
@@ -72,6 +76,7 @@ export interface EditorConfiguration {
   theme: MarkdownTheme
   margins: 'S'|'M'|'L'
   highlightWhitespace: boolean
+  showMarkdownLineNumbers: boolean
   countChars: boolean
 }
 
@@ -88,6 +93,7 @@ export function getDefaultConfig (): EditorConfiguration {
     },
     autocompleteSuggestEmojis: false,
     autoCloseBrackets: true,
+    renderingMode: 'preview',
     renderCitations: true,
     renderIframes: true,
     renderImages: true,
@@ -97,6 +103,8 @@ export function getDefaultConfig (): EditorConfiguration {
     renderHeadings: true,
     renderTables: true,
     renderEmphasis: true,
+    renderPandoc: true,
+    renderHorizontalRules: true,
     imagePreviewWidth: 100,
     imagePreviewHeight: 100,
     idRE: '(\\d{14})',
@@ -105,7 +113,8 @@ export function getDefaultConfig (): EditorConfiguration {
     indentWithTabs: false,
     linkPreference: 'always',
     zknLinkFormat: 'link|title',
-    linkFilenameOnly: false,
+    linkWithIDIfPossible: false,
+    zknAddFileTitle: true,
     metadata: {
       path: '',
       id: '',
@@ -128,6 +137,7 @@ export function getDefaultConfig (): EditorConfiguration {
     theme: 'berlin',
     margins: 'M',
     highlightWhitespace: false,
+    showMarkdownLineNumbers: false,
     countChars: false
   }
 }

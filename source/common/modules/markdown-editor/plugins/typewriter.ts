@@ -46,29 +46,34 @@ const typewriterThemeCompartment = new Compartment()
  * viewport if the typewriter mode is active, and applies or disengages the
  * corresponding theme based on the configuration
  */
-const scrollAndTheme = EditorState.transactionExtender.of(transaction => {
+const scrollAndTheme = EditorState.transactionExtender.from(configField, config => transaction => {
   const effects: Array<StateEffect<any>> = []
 
+  let typewriterMode = config.typewriterMode
+  let modeChanged = false
   // First, check if we have to apply or disengage the theme
   for (const effect of transaction.effects) {
     if (effect.is(configUpdateEffect)) {
-      if (effect.value.typewriterMode === undefined) {
-        continue // No reconfiguration of our config value is being performed here
-      }
-
-      if (effect.value.typewriterMode) {
-        effects.push(typewriterThemeCompartment.reconfigure(typewriterTheme))
-      } else {
-        effects.push(typewriterThemeCompartment.reconfigure([]))
+      if (effect.value.typewriterMode !== undefined) {
+        modeChanged = typewriterMode !== effect.value.typewriterMode
+        typewriterMode = effect.value.typewriterMode
+        effects.push(typewriterThemeCompartment.reconfigure(typewriterMode ? [typewriterTheme] : []))
       }
     }
   }
 
   // Second, check if we should scroll into view
-  if (transaction.docChanged && transaction.state.field(configField).typewriterMode) {
+  if ((typewriterMode && transaction.docChanged) || modeChanged) {
     effects.push(EditorView.scrollIntoView(transaction.state.selection.main.from, { y: 'center' }))
   }
 
+  // We MUST return `null` here if there is nothing to extend. Otherwise, stuff
+  // in other parts of the code starts to break. More specifically, we had the
+  // issue that, when we always return `effects`, snippet insertion would
+  // misbehave in the sense that the tab stops would stop recalculating their
+  // positions. I have the suspicion that this is wanted behavior in CodeMirror,
+  // where transaction extenders are powerful and they can override quite a lot
+  // of functionality. For more context, see #6058
   if (effects.length === 0) {
     return null
   } else {
@@ -84,8 +89,7 @@ function renderTypewriterLine (state: EditorState): DecorationSet {
     return Decoration.none
   }
 
-  const activeLine = state.doc.lineAt(state.selection.main.head).number
-  const lineStart = state.doc.line(activeLine).from
+  const lineStart = state.doc.lineAt(state.selection.main.head).from
   return Decoration.set(typewriterFocusedLineDeco.range(lineStart))
 }
 
