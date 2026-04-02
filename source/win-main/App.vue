@@ -116,6 +116,12 @@
     v-on:start="startPomodoro()"
     v-on:stop="stopPomodoro()"
   ></PopoverPomodoro>
+  <PopoverPandoc
+    v-if="showPandocPopover && pandocButton !== null"
+    v-bind:target="pandocButton"
+    v-on:close="showPandocPopover = false"
+    v-on:insert-pandoc="insertPandoc($event)"
+  ></PopoverPandoc>
 </template>
 
 <script setup lang="ts">
@@ -146,6 +152,7 @@ import PopoverTags from './PopoverTags.vue'
 import PopoverPomodoro from './PopoverPomodoro.vue'
 import PopoverTable from './PopoverTable.vue'
 import PopoverDocInfo from './PopoverDocInfo.vue'
+import PopoverPandoc from './PopoverPandoc.vue'
 import { trans } from '@common/i18n-renderer'
 import localiseNumber from '@common/util/localise-number'
 import generateId from '@common/util/generate-id'
@@ -162,7 +169,7 @@ import {
 import glassFile from './assets/glass.wav'
 import alarmFile from './assets/digital_alarm.mp3'
 import chimeFile from './assets/chime.mp3'
-import { type LeafNodeJSON } from '@dts/common/documents'
+import { DocumentType, type LeafNodeJSON } from '@dts/common/documents'
 import { buildPipeMarkdownTable } from '@common/util/build-pipe-markdown-table'
 import { type UpdateState } from '@providers/updates'
 import { type ToolbarControl } from '@common/vue/window/WindowToolbar.vue'
@@ -197,7 +204,7 @@ const searchParams = new URLSearchParams(window.location.search)
 // necessary for the documents and split views to show up.
 const windowId = searchParams.get('window_id')!
 
-const fileManagerVisible = ref(true)
+const fileManagerVisible = computed<boolean>(() => configStore.config.window.fileManagerVisible)
 const mainSplitViewVisibleComponent = ref<'fileManager'|'globalSearch'>('fileManager')
 const isUpdateAvailable = ref(false)
 const hasVibrancy = computed(() => configStore.config.window.vibrancy && process.platform === 'darwin')
@@ -223,6 +230,8 @@ const docInfoButton = ref<HTMLElement|null>(null)
 const showDocInfoPopover = ref<boolean>(false)
 const pomodoroButton = ref<HTMLElement|null>(null)
 const showPomodoroPopover = ref<boolean>(false)
+const pandocButton = ref<HTMLElement|null>(null)
+const showPandocPopover = ref<boolean>(false)
 
 export interface PomodoroConfig {
   currentEffectFile: string
@@ -294,6 +303,7 @@ export interface EditorCommands {
   moveSection: boolean
   addKeywords: boolean
   replaceSelection: boolean
+  insertPandoc: boolean
   executeCommand: boolean
   data: any
 }
@@ -304,6 +314,7 @@ const editorCommands = ref<EditorCommands>({
   moveSection: false,
   addKeywords: false,
   replaceSelection: false,
+  insertPandoc: false,
   executeCommand: false,
   data: undefined
 })
@@ -372,7 +383,7 @@ const parsedDocumentInfo = computed<string>(() => {
   if (info.selections.length > 0) {
     // We have selections to display.
     let length = 0
-    info.selections.forEach((sel: any) => {
+    info.selections.forEach(sel => {
       length += shouldCountChars.value ? sel.chars : sel.words
     })
 
@@ -480,6 +491,13 @@ const toolbarControls = computed<ToolbarControl[]>(() => {
       type: 'spacer',
       id: 'spacer-two',
       size: '1x'
+    },
+    {
+      type: 'button',
+      id: 'pandocDivOrSpan',
+      title: trans('Insert Pandoc Div or Span'),
+      icon: 'drag-handle',
+      visible: getToolbarButtonDisplay('showPandocDivSpanButton')
     },
     {
       type: 'button',
@@ -614,11 +632,11 @@ watch(distractionFree, (newValue) => {
       sidebar: sidebarVisible.value
     }
     configStore.setConfigValue('window.sidebarVisible', false)
-    fileManagerVisible.value = false
+    configStore.setConfigValue('window.fileManagerVisible', false)
   } else {
     // Leave distraction free mode
     configStore.setConfigValue('window.sidebarVisible', sidebarsBeforeDistractionfree.value.sidebar)
-    fileManagerVisible.value = sidebarsBeforeDistractionfree.value.fileManager
+    configStore.setConfigValue('window.fileManagerVisible', sidebarsBeforeDistractionfree.value.fileManager)
   }
 })
 
@@ -629,6 +647,7 @@ onMounted(() => {
   tableButton.value = document.querySelector('#toolbar-insert-table')
   docInfoButton.value = document.querySelector('#toolbar-document-info')
   pomodoroButton.value = document.querySelector('#toolbar-pomodoro')
+  pandocButton.value = document.querySelector('#toolbar-pandocDivOrSpan')
 
   ipcRenderer.on('shortcut', (event, shortcut) => {
     if (shortcut === 'toggle-sidebar') {
@@ -637,7 +656,7 @@ onMounted(() => {
       editorCommands.value.data = generateId(configStore.config.zkn.idGen)
       editorCommands.value.replaceSelection = !editorCommands.value.replaceSelection
     } else if (shortcut === 'copy-current-id' && documentTreeStore.lastLeafActiveFile !== undefined) {
-      ipcRenderer.invoke('application', {
+      ipcRenderer.invoke('fsal', {
         command: 'get-descriptor',
         payload: documentTreeStore.lastLeafActiveFile.path
       })
@@ -648,7 +667,7 @@ onMounted(() => {
         })
         .catch(err => console.error(err))
     } else if (shortcut === 'global-search') {
-      fileManagerVisible.value = true
+      configStore.setConfigValue('window.fileManagerVisible', true)
       mainSplitViewVisibleComponent.value = 'globalSearch'
       // Focus input
       nextTick()
@@ -656,9 +675,9 @@ onMounted(() => {
         .catch(err => console.error(err))
     } else if (shortcut === 'toggle-file-manager') {
       if (fileManagerVisible.value && mainSplitViewVisibleComponent.value === 'fileManager') {
-        fileManagerVisible.value = false
+        configStore.setConfigValue('window.fileManagerVisible', false)
       } else if (!fileManagerVisible.value) {
-        fileManagerVisible.value = true
+        configStore.setConfigValue('window.fileManagerVisible', true)
         mainSplitViewVisibleComponent.value = 'fileManager'
       } else if (mainSplitViewVisibleComponent.value === 'globalSearch') {
         mainSplitViewVisibleComponent.value = 'fileManager'
@@ -666,7 +685,7 @@ onMounted(() => {
     } else if (shortcut === 'filter-files') {
       // We need to immediately make the file manager visible, which will
       // -- in the next tick -- focus its filter input.
-      fileManagerVisible.value = true
+      configStore.setConfigValue('window.fileManagerVisible', true)
       mainSplitViewVisibleComponent.value = 'fileManager'
     } else if (shortcut === 'export') {
       showExportPopover.value = true
@@ -700,6 +719,11 @@ onMounted(() => {
     editorSidebarSplitComponent.value?.hideView(2)
   }
 
+  // Similarly, if the file manager is set to hidden, do that, too.
+  if (!fileManagerVisible.value) {
+    fileManagerSplitComponent.value?.hideView(1)
+  }
+
   // Check if there is an update available.
   ipcRenderer.invoke('update-provider', { command: 'update-status' })
     .then((state: UpdateState) => {
@@ -731,6 +755,11 @@ function insertTable (spec: { rows: number, cols: number }): void {
 
   editorCommands.value.data = buildPipeMarkdownTable(ast, align)
   editorCommands.value.replaceSelection = !editorCommands.value.replaceSelection
+}
+
+function insertPandoc (spec: { type: string, attributes: string }): void {
+  editorCommands.value.data = spec
+  editorCommands.value.insertPandoc = !editorCommands.value.insertPandoc
 }
 
 function genericJtl (lineNumber: number): void {
@@ -806,7 +835,7 @@ function moveSection (data: { from: number, to: number }): void {
 
 function startGlobalSearch (terms: string): void {
   mainSplitViewVisibleComponent.value = 'globalSearch'
-  fileManagerVisible.value = true
+  configStore.setConfigValue('window.fileManagerVisible', true)
   nextTick()
     .then(() => {
       globalSearchComponent.value?.startSearch(terms)
@@ -829,7 +858,7 @@ function handleClick (clickedID?: string): void {
     ipcRenderer.invoke('application', { command: 'open-preferences' })
       .catch(e => console.error(e))
   } else if (clickedID === 'new-file') {
-    ipcRenderer.invoke('application', { command: 'file-new', payload: { type: 'md' } })
+    ipcRenderer.invoke('application', { command: 'file-new', payload: { type: DocumentType.Markdown } })
       .catch(e => console.error(e))
   } else if (clickedID === 'previous-file') {
     ipcRenderer.invoke('documents-provider', {
@@ -864,6 +893,8 @@ function handleClick (clickedID?: string): void {
     showTablePopover.value = !showTablePopover.value
   } else if (clickedID === 'document-info') {
     showDocInfoPopover.value = !showDocInfoPopover.value
+  } else if (clickedID === 'pandocDivOrSpan') {
+    showPandocPopover.value = !showPandocPopover.value
   } else if (clickedID !== undefined && clickedID.startsWith('markdown') && clickedID.length > 8) {
     // The user clicked a command button, so we just have to run that.
     editorCommands.value.data = clickedID
@@ -911,7 +942,7 @@ function handleToggle (controlState: { id?: string, state?: string | boolean }):
     configStore.setConfigValue('window.sidebarVisible', state)
   } else if (id === 'toggle-file-manager') {
     // Since this is a three-way-toggle, we have to inspect the state.
-    fileManagerVisible.value = state !== undefined
+    configStore.setConfigValue('window.fileManagerVisible', state !== undefined)
     if (typeof state === 'string' && (state === 'fileManager' || state === 'globalSearch')) {
       // Set the shown component to the correct one
       mainSplitViewVisibleComponent.value = state
@@ -991,6 +1022,5 @@ function getToolbarButtonDisplay (configName: keyof ConfigOptions['displayToolba
 }
 </script>
 
-<style lang="less">
-//
+<style lang="css" scoped>
 </style>

@@ -22,10 +22,11 @@
  */
 
 import { extractASTNodes, markdownToAST } from '.'
-import { type CitationNode, type ASTNode, type GenericNode, type FootnoteRef } from './markdown-ast'
+import type { CitationNode, ASTNode, GenericNode, FootnoteRef } from './markdown-ast'
 import { type MarkdownParserConfig } from '../markdown-editor/parser/markdown-parser'
 import _ from 'underscore'
 import { katexToHTML } from '@common/util/mathtex-to-html'
+import sanitizeHtml from 'sanitize-html'
 
 /**
  * Represents an HTML tag. This is a purposefully shallow representation
@@ -43,6 +44,12 @@ interface HTMLTag {
    * A simple map of attributes (e.g., ['class', 'my-class'])
    */
   attributes: Array<[ string, string ]>
+  /**
+   * A flag indicating whether this node includes raw HTML. This means that (a)
+   * you might want to sanitize its contents if you wish to insert it into a DOM
+   * and (b) that it should not have a surrounding tag.
+   */
+  containsHTML: boolean
 }
 
 export type CitationCallback = (citations: CiteItem[], composite: boolean) => string|undefined
@@ -57,6 +64,13 @@ export interface MD2HTMLOptions {
    * there is a bibliography to render.
    */
   referenceSectionTitle?: string
+  /**
+   * If provided, the function will sanitize potentially unsafe HTML so that you
+   * can plug the returned HTML string directly into a DOM tree. This option is
+   * preferred to sanitizing the HTML after the fact, since that can eliminate
+   * safe but exotic HTML elements such as MathML.
+   */
+  sanitizeHTML?: boolean
   /**
    * This is called whenever the parser finds a citation.
    *
@@ -102,7 +116,8 @@ function getTagInfo (node: GenericNode): HTMLTag {
   const ret: HTMLTag = {
     tagName: 'div',
     selfClosing: false,
-    attributes: []
+    attributes: [],
+    containsHTML: node.name === 'HTMLBlock' || node.name === 'HTMLTag'
   }
 
   if (node.name === 'HorizontalRule') {
@@ -130,6 +145,27 @@ function getTagInfo (node: GenericNode): HTMLTag {
 }
 
 /**
+ * Sanitizes a provided HTML string for safe use within the DOM.
+ *
+ * @param   {string}  html  The dirty HTML
+ *
+ * @return  {string}        The sane HTML
+ */
+function sanitize (html: string): string {
+  return sanitizeHtml(html, {
+    // These options basically translate into: Allow nothing but bare metal tags
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img']),
+    disallowedTagsMode: 'escape',
+    allowedIframeDomains: [],
+    allowedIframeHostnames: [],
+    allowedScriptDomains: [],
+    allowedSchemes: sanitizeHtml.defaults.allowedSchemes.concat(['safe-file']),
+    allowedScriptHostnames: [],
+    allowVulnerableTags: false
+  })
+}
+
+/**
  * Returns a ready-to-use HTML attribute string for the provided node.
  *
  * @param   {ASTNode}  node  The node.
@@ -137,13 +173,14 @@ function getTagInfo (node: GenericNode): HTMLTag {
  * @return  {string}         The attribute string. Includes leading space if necessary.
  */
 function renderNodeAttributes (node: ASTNode): string {
-  if (node.attributes === undefined) {
+  const rawAttributes = Object.entries(node.attributes)
+  if (rawAttributes.length === 0) {
     return ''
   }
 
   const attr: string[] = []
 
-  for (const [ key, value ] of Object.entries(node.attributes)) {
+  for (const [ key, value ] of rawAttributes) {
     let sanitizedValue = value
     if (Array.isArray(sanitizedValue)) {
       switch (key) {
@@ -193,6 +230,8 @@ function addAttribute (node: ASTNode, attributeName: string, ...values: string[]
  */
 export function nodeToHTML (node: ASTNode|ASTNode[], options: MD2HTMLOptions, indent: number = 0): string {
   const HIDDEN_GENERIC_NODES = ['Document']
+
+  const maybeSanitize = options.sanitizeHTML === true ? sanitize : (x: string) => x
 
   // Convenience to convert a list of child nodes to HTML
   if (Array.isArray(node)) {
@@ -278,6 +317,10 @@ export function nodeToHTML (node: ASTNode|ASTNode[], options: MD2HTMLOptions, in
       case 'italic':
         return `${node.whitespaceBefore}<em${attr}>${body}</em>`
     }
+  } else if (node.type === 'Strikethrough') {
+    const body = nodeToHTML(node.children, options, indent)
+    const attr = renderNodeAttributes(node)
+    return `${node.whitespaceBefore}<s${attr}>${body}</s>`
   } else if (node.type === 'Table') {
     const rows: string[] = []
     for (const row of node.rows) {
@@ -323,6 +366,10 @@ export function nodeToHTML (node: ASTNode|ASTNode[], options: MD2HTMLOptions, in
     // Generic nodes are differentiated by name. There are a few we can support,
     // but most we wrap in a div.
     const tagInfo = getTagInfo(node)
+
+    if (tagInfo.containsHTML) {
+      return maybeSanitize(nodeToHTML(node.children, options, indent))
+    }
 
     if ([ 'div', 'span' ].includes(tagInfo.tagName) && node.children.length === 0) {
       return '' // Simplify the resulting HTML by removing empty elements

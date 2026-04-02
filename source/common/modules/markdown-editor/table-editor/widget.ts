@@ -133,11 +133,11 @@ export class TableWidget extends WidgetType {
       })
 
       return wrapper
-    } catch (err: any) {
-      console.log('Could not create table', err)
+    } catch (err: unknown) {
+      console.error(err)
       const error = document.createElement('div')
       error.classList.add('error')
-      error.textContent = `Could not render table: ${err.message}`
+      error.textContent = `Could not render table: ${err instanceof Error ? err.message : 'Unknown error'}`
       return error
     }
   }
@@ -371,7 +371,10 @@ function updateRow (
       td.appendChild(contentWrapper)
 
       const { zknLinkFormat } = view.state.field(configField)
-      const html = nodeToHTML(cell.children, { onCitation, zknLinkFormat }, 0).trim()
+      const html = nodeToHTML(cell.children, {
+        onCitation, zknLinkFormat,
+        sanitizeHTML: true
+      }, 0).trim()
       contentWrapper.innerHTML = html.length > 0 ? html : '&nbsp;'
       interceptAnchorClicks(contentWrapper, href => openMarkdownLink(href, view))
 
@@ -446,7 +449,10 @@ function updateRow (
       subview.destroy()
       contentWrapper.classList.remove('editing')
       const { zknLinkFormat } = view.state.field(configField)
-      const html = nodeToHTML(cell.children, { onCitation, zknLinkFormat }, 0).trim()
+      const html = nodeToHTML(cell.children, {
+        onCitation, zknLinkFormat,
+        sanitizeHTML: true
+      }, 0).trim()
       contentWrapper.innerHTML = html.length > 0 ? html : '&nbsp;'
       interceptAnchorClicks(contentWrapper, href => openMarkdownLink(href, view))
     } else if (subview === null && selectionInCell) {
@@ -488,7 +494,10 @@ function updateRow (
     } else if (subview === null) {
       // Simply transfer the contents
       const { zknLinkFormat } = view.state.field(configField)
-      const html = nodeToHTML(cell.children, { onCitation, zknLinkFormat }, 0).trim()
+      const html = nodeToHTML(cell.children, {
+        onCitation, zknLinkFormat,
+        sanitizeHTML: true
+      }, 0).trim()
       if (html !== contentWrapper.innerHTML) {
         contentWrapper.innerHTML = html.length > 0 ? html : '&nbsp;'
         interceptAnchorClicks(contentWrapper, href => openMarkdownLink(href, view))

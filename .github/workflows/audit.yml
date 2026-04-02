@@ -25,11 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     # Setup
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         ref: ${{ github.ref }}
     - name: Setup NodeJS ${{ env.NODE_VERSION }}
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'yarn'
@@ -38,7 +38,7 @@ jobs:
     # Run the actual audit
     - name: Audit
       run: |
-        yarn npm audit --recursive --json > audit_result.json || true
+        yarn npm audit --recursive --severity moderate --json > audit_result.json || true
     - name: Format results
       # NOTE: The unholy sausage in the third line essentially uses jq to
       # condense the most important info into a human-readable txt file. This is
