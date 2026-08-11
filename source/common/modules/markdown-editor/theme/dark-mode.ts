@@ -3,11 +3,11 @@
  * BEGIN HEADER
  *
  * Contains:        CodeMirror Extension
- * CVM-Role:        View
+ * CVM-Role:        Extension
  * Maintainer:      Hendrik Erz
  * License:         GNU GPL v3
  *
- * Description:     A Dark mode extension for the CodeMirror editor.
+ * Description:     A dark mode extension for the CodeMirror editor.
  *
  * END HEADER
  */
@@ -24,7 +24,7 @@ import {
   StateEffect,
   EditorState
 } from '@codemirror/state'
-import { defaultLight, defaultDark } from './main-override'
+import { defaultLight, defaultDark } from './editor'
 
 const darkModeCompartment = new Compartment()
 
@@ -119,6 +119,28 @@ const darkModeSwitcher = EditorState.transactionExtender.of(transaction => {
 
   return effects.length > 0 ? { effects } : null
 })
+
+/**
+ * This public helper function returns a boolean depending
+ * on whether the editor should use a light theme, dark theme,
+ * or match the main UI.
+ *
+ * @param   {boolean}   darkMode      The main UI dark mode setting
+ * @param   {string}    editorTheme   The theme of the editor. 'match' will
+ *                                    match the value of darkMode
+ *
+ * @return  {boolean}                  Whether to use a dark theme
+ */
+export function useDarkModeEditor (appDarkMode: boolean, editorTheme: 'match'|'dark'|'light' = 'match'): boolean {
+  switch(editorTheme) {
+    case 'match':
+      return appDarkMode
+    case 'light':
+      return false
+    case 'dark':
+      return true
+  }
+}
 
 /**
  * An extension that enables a CodeMirror editor to quickly switch between light

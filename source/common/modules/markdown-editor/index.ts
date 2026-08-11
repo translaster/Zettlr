@@ -81,7 +81,6 @@ import { addNewFootnote } from './commands/footnotes'
 
 // Utilities
 import { copyAsHTML, pasteAsPlain } from './util/copy-paste-cut'
-import openMarkdownLink from './util/open-markdown-link'
 import { highlightRangesEffect } from './plugins/highlight-ranges'
 
 import safeAssign from '@common/util/safe-assign'
@@ -95,13 +94,13 @@ import {
 } from './plugins/remote-doc'
 import { markdownToAST } from '../markdown-utils'
 import { countField, updateWordCountEffect } from './plugins/statistics-fields'
-import type { SyntaxNode } from '@lezer/common'
-import { darkModeEffect } from './theme/dark-mode'
+import { useDarkModeEditor, darkModeEffect } from './theme/dark-mode'
 import { editorMetadataFacet } from './plugins/editor-metadata'
 import { projectInfoUpdateEffect, type ProjectInfo } from './plugins/project-info-field'
 import { moveSection } from './commands/move-section'
 import { parsePandocAttributes } from 'source/common/pandoc-util/parse-pandoc-attributes'
 import { closeSearchPanel, openSearchPanel, searchPanelOpen } from '@codemirror/search'
+import { clickListeners } from './plugins/click-listeners'
 
 export interface DocumentWrapper {
   path: string
@@ -338,77 +337,14 @@ export default class MarkdownEditor extends EventEmitter {
           }
         }
       },
-      domEventsListeners: {
-        mousedown (event, view) {
-          const cmd = event.metaKey && process.platform === 'darwin'
-          const ctrl = event.ctrlKey && process.platform !== 'darwin'
-          if (!cmd && !ctrl) {
-            return false
-          }
-
-          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-          if (pos === null) {
-            return false
-          }
-
-          const nodeAt = syntaxTree(view.state).resolve(pos, 0)
-
-          // Both plain URLs as well as Zettelkasten links and tags are
-          // implemented on the syntax tree.
-          if (nodeAt.type.name === 'URL') {
-            // We found a plain link!
-            const url = view.state.sliceDoc(nodeAt.from, nodeAt.to)
-            if (url.startsWith('[[') && url.endsWith(']]')) {
-              editorInstance.emit('zettelkasten-link', url.substring(2, url.length - 2))
-            } else {
-              openMarkdownLink(url, view)
-            }
-            event.preventDefault()
-            return true
-          } else if ([ 'ZknLinkContent', 'ZknLinkTitle', 'ZknLinkPipe', 'ZknLinkMark' ].includes(nodeAt.type.name)) {
-            // We found a Zettelkasten link!
-            event.preventDefault()
-            // In these cases, nodeAt.parent is always a ZettelkastenLink
-            const contentNode = nodeAt.parent?.getChild('ZknLinkContent')
-            if (contentNode != null) {
-              const linkContents = view.state.sliceDoc(contentNode.from, contentNode.to)
-              editorInstance.emit('zettelkasten-link', linkContents)
-            }
-            return true
-          } else if (nodeAt.type.name === 'ZknTag') {
-            // A tag!
-            const mark = nodeAt.getChild('ZknTagMark')
-            const tagContents = view.state.sliceDoc(mark ? mark.to : nodeAt.from, nodeAt.to)
-            editorInstance.emit('zettelkasten-tag', tagContents)
-            event.preventDefault()
-            return true
-          }
-
-          // Lastly, the user may have clicked somewhere in a link. However,
-          // since the link description can take various inline elements, we
-          // have to recursively move up the tree until we find a 'Link' element
-          // or abort if we reach the top
-          let currentNode: SyntaxNode|null = nodeAt
-          while (currentNode !== null && currentNode.name !== 'Link') {
-            currentNode = currentNode.parent
-          }
-
-          if (currentNode !== null) {
-            // We have a link
-            const urlNode = currentNode.getChild('URL')
-            if (urlNode !== null) {
-              const url = view.state.sliceDoc(urlNode.from, urlNode.to)
-              if (url.startsWith('[[') && url.endsWith(']]')) {
-                editorInstance.emit('zettelkasten-link', url.substring(2, url.length - 2))
-              } else {
-                openMarkdownLink(url, view)
-              }
-              event.preventDefault()
-              return true
-            }
-          }
+      domEventsListeners: clickListeners({
+        onWikiLink (url) {
+          editorInstance.emit('zettelkasten-link', url)
+        },
+        onTag (tag) {
+          editorInstance.emit('zettelkasten-tag', tag)
         }
-      }
+      })
     }
 
     switch (type) {
@@ -607,6 +543,7 @@ export default class MarkdownEditor extends EventEmitter {
   private onConfigUpdate (newOptions: Partial<EditorConfiguration>): void {
     const inputModeChanged = newOptions.inputMode !== undefined && newOptions.inputMode !== this.config.inputMode
     const darkModeChanged = newOptions.darkMode !== undefined && newOptions.darkMode !== this.config.darkMode
+    const editorModeChanged = newOptions.darkModeEditor !== undefined && newOptions.darkModeEditor !== this.config.darkModeEditor
     const themeChanged = newOptions.theme !== undefined && newOptions.theme !== this.config.theme
 
     // Third: The input mode, if applicable
@@ -621,12 +558,15 @@ export default class MarkdownEditor extends EventEmitter {
     }
 
     // Fourth: Switch theme, if applicable
-    if (darkModeChanged || themeChanged) {
+    if (darkModeChanged || editorModeChanged || themeChanged) {
       const themes = getMainEditorThemes()
+
+      const darkMode = newOptions.darkMode ?? this.config.darkMode
+      const darkModeEditor = newOptions.darkModeEditor ?? this.config.darkModeEditor
 
       this._instance.dispatch({
         effects: darkModeEffect.of({
-          darkMode: newOptions.darkMode,
+          darkMode: useDarkModeEditor(darkMode, darkModeEditor),
           ...themes[newOptions.theme ?? this.config.theme]
         })
       })
@@ -640,7 +580,7 @@ export default class MarkdownEditor extends EventEmitter {
    *
    * @return  {any}           The value of the key
    */
-  getOption (name: string): any {
+  getOption (name: string) {
     const config = this._instance.state.field(configField)
     if (name in config) {
       return config[name as keyof EditorConfiguration]

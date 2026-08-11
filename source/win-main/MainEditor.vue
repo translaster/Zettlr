@@ -50,6 +50,9 @@ import { isAbsolutePath, pathBasename, pathDirname, resolvePath } from '@common/
 import type { DocumentManagerIPCAPI, DocumentsUpdateContext } from 'source/app/service-providers/documents'
 import type { CiteprocProviderIPCAPI } from 'source/app/service-providers/citeproc'
 import type { ProjectInfo } from 'source/common/modules/markdown-editor/plugins/project-info-field'
+import type { FileContentSearchResult } from 'source/app/service-providers/search'
+import type { CustomEditorShortcut } from 'source/common/modules/markdown-editor/keymaps/shortcuts'
+import getDocumentTitle from './util/get-document-title'
 
 const ipcRenderer = window.ipc
 
@@ -182,6 +185,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (currentEditor !== null) {
     props.persistentStateMap.set(props.file.path, currentEditor.persistentState)
+    // Clear out the table of contents before unmounting the component.
+    windowStateStore.tableOfContents = undefined
     currentEditor.unmount()
   }
 })
@@ -228,7 +233,7 @@ const editorConfiguration = computed<EditorConfigOptions>(() => {
   // right after setting the new configurations. Plus, the user won't update
   // everything all the time, but rather do one initial configuration, so
   // even if we incur a performance penalty, it won't be noticed that much.
-  const { editor, display, zkn, darkMode } = configStore.config
+  const { editor, display, zkn, darkMode, shortcuts, darkModeEditor } = configStore.config
   return {
     indentUnit: editor.indentUnit,
     indentWithTabs: editor.indentWithTabs,
@@ -244,6 +249,9 @@ const editorConfiguration = computed<EditorConfigOptions>(() => {
       replacements: editor.autoCorrect.replacements
     },
     autocompleteSuggestEmojis: editor.autocompleteSuggestEmojis,
+    snippetAutocompleteTriggerCharacter: editor.snippetAutocompleteTriggerCharacter,
+    autocompleteWithEnter: editor.autocompleteWithEnter,
+    autocompleteWithTab: editor.autocompleteWithTab,
     imagePreviewWidth: display.imageWidth,
     imagePreviewHeight: display.imageHeight,
     boldFormatting: editor.boldFormatting,
@@ -278,10 +286,14 @@ const editorConfiguration = computed<EditorConfigOptions>(() => {
     showStatusbar: editor.showStatusbar,
     showFormattingToolbar: editor.showFormattingToolbar,
     darkMode,
+    darkModeEditor,
     theme: display.theme,
     highlightWhitespace: editor.showWhitespace,
     showMarkdownLineNumbers: editor.showMarkdownLineNumbers,
-    countChars: editor.countChars
+    countChars: editor.countChars,
+    shortcuts: Object.entries(shortcuts.editor)
+      .map(([ name, shortcut ]) => ({ name, shortcut }))
+      .filter((shortcut): shortcut is CustomEditorShortcut => shortcut.shortcut !== undefined)
   } satisfies EditorConfigOptions
 })
 
@@ -624,15 +636,9 @@ async function updateFileDatabase (): Promise<void> {
 
   // First, add all existing files to the database ...
   for (const file of fsalFiles.value) {
-    let displayName = pathBasename(file.name, file.ext)
-    if (useTitle.value && file.yamlTitle !== undefined) {
-      displayName = file.yamlTitle
-    } else if (useH1.value && file.firstHeading !== null) {
-      displayName = file.firstHeading
-    }
     fileDatabase.push({
       filename: pathBasename(file.name, file.ext),
-      displayName,
+      displayName: getDocumentTitle(file),
       id: file.id
     })
   }
@@ -663,7 +669,7 @@ function maybeHighlightSearchResults (): void {
   // Construct CodeMirror.Ranges from the results
   const rangesToHighlight = []
   // NOTE: We have to filter out "whole-file" results
-  for (const res of result.result.filter(res => res.line > -1)) {
+  for (const res of result.result.filter((res): res is FileContentSearchResult => res.type === 'content' && res.line > -1)) {
     const startIdx = currentEditor.instance.state.doc.line(res.line + 1).from
     for (const range of res.ranges) {
       const { from, to } = range

@@ -37,13 +37,15 @@ import type LogProvider from '@providers/log'
 import { hasMarkdownExt, hasCodeExt } from '@common/util/file-extention-checks'
 import getMarkdownFileParser from './util/file-parser'
 import type ConfigProvider from '@providers/config'
-import { promises as fs, constants as FS_CONSTANTS } from 'fs'
+import { promises as fs, constants as FS_CONSTANTS, type Stats } from 'fs'
 import { safeDelete } from './util/safe-delete'
 import { type FilesystemMetadata, getFilesystemMetadata } from './util/get-fs-metadata'
 import { ignorePath } from 'source/common/util/ignore-path'
 import broadcastIPCMessage from 'source/common/util/broadcast-ipc-message'
-import type { EventName } from 'chokidar/handler'
+import type { EventName } from 'chokidar/handler.js'
 import { getIDRE } from 'source/common/regular-expressions'
+import type LongRunningTaskProvider from '../long-running-tasks'
+import { trans } from 'source/common/i18n-main'
 
 // Re-export all interfaces necessary for other parts of the code (Document Manager)
 export {
@@ -75,7 +77,8 @@ export default class FSAL extends ProviderContract {
 
   constructor (
     private readonly _logger: LogProvider,
-    private readonly _config: ConfigProvider
+    private readonly _config: ConfigProvider,
+    private readonly _lrt: LongRunningTaskProvider
   ) {
     super()
 
@@ -171,7 +174,7 @@ export default class FSAL extends ProviderContract {
    * @param   {EventName}  event    The event name
    * @param   {string}     absPath  The absolute path for this event
    */
-  private emitChokidarEvent (event: EventName, absPath: string): void {
+  private emitChokidarEvent (event: EventName, absPath: string, stats?: Stats): void {
     if (event === 'all' || event === 'raw') {
       return this._logger.error('[FSAL] Cannot emit events "all" or "raw" -- wrong chokidar setup!')
     }
@@ -182,6 +185,10 @@ export default class FSAL extends ProviderContract {
 
     if (event === 'error') {
       return this._logger.error(`[FSAL] Chokidar reported an error for path "${absPath}"`)
+    }
+
+    if (stats?.isSymbolicLink() === true) {
+      return this._logger.error(`[FSAL] Ignoring event "${event}" for path "${absPath}" because it is a symbolic link.`)
     }
 
     // Regardless of the event, it will invalidate that particular cache entry.
@@ -249,8 +256,8 @@ export default class FSAL extends ProviderContract {
         } else {
           // Start watching the root path.
           const watcher = new FSALWatchdog(this._logger, this._config)
-          watcher.on('change', (event, absPath) => {
-            this.emitChokidarEvent(event, absPath)
+          watcher.on('change', (event, absPath, stats) => {
+            this.emitChokidarEvent(event, absPath, stats)
           })
           watcher.watchPath(rootPath)
           this.watchers.set(rootPath, watcher)
@@ -281,6 +288,11 @@ export default class FSAL extends ProviderContract {
 
     // Start a timer to measure how long the roots take to load.
     let start = performance.now()
+
+    // Register a LRT. NOTE: We only do that if "onFile" is not defined, because
+    // this function is called also from within the lifecycle when the FSAL
+    // cache is cleared on startup.
+    const task = onFile === undefined ? this._lrt.registerTask(trans('Indexing files'), trans('Discovering paths to index…')) : undefined
 
     const { openFiles, openWorkspaces } = this._config.get().app
     const pathsToIndex: string[] = []
@@ -315,6 +327,7 @@ export default class FSAL extends ProviderContract {
       this._logger.info(`[FSAL] Discovered paths in ${Math.floor(pathDiscoveryDuration / 1000 * 100) / 100}s`)
     }
     start = performance.now()
+    task?.update({ info: trans('Indexing %s paths…', pathsToIndex.length), percentage: 0 })
 
     // Round the increment to 4 digits after the period.
     const roundToDigits = 4
@@ -323,6 +336,7 @@ export default class FSAL extends ProviderContract {
 
     for (const absPath of pathsToIndex) {
       currentPercent += increment
+      task?.update({ percentage: currentPercent / 100 })
       if (onFile !== undefined) {
         onFile(absPath, currentPercent)
       }
@@ -331,6 +345,9 @@ export default class FSAL extends ProviderContract {
       // and automatically recache if necessary.
       await this.getDescriptorFor(absPath)
     }
+
+    task?.update({ info: trans('Indexing complete.') })
+    task?.endTask('success')
 
     const reindexDuration = performance.now() - start
     if (reindexDuration < 1000) {
@@ -922,7 +939,7 @@ export default class FSAL extends ProviderContract {
     } catch (err: unknown) {
       const code = err instanceof Error ? (err as NodeJS.ErrnoException).code : undefined
       if (code === 'EACCES' || code === 'EPERM') {
-        this._logger.error(`[FSAL] Could not read directiroy ${directoryPath}: Could not read/access the directory (code: ${code})`)
+        this._logger.error(`[FSAL] Could not read directory ${directoryPath}: Could not read/access the directory (code: ${code})`)
       } else if (err instanceof Error) {
         this._logger.error(`[FSAL] Could not read directory: ${directoryPath}`, err)
       }

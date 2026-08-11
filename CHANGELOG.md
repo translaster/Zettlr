@@ -2,8 +2,226 @@
 
 ## GUI and Functionality
 
+- **Feature**: You can now choose whether you want to automatically accept the
+  selected autocomplete suggestion when pressing `Tab`, `Enter`, both, or
+  disable automatic accepting entirely (#6485).
+- Fixed an issue where in some places instead of showing you a proper file
+  title, the app would default to only showing you the filename, and neither a
+  heading or YAML title, if you specified it as such. Now, the logic has been
+  centralized and everywhere you expect a proper file title it should now show
+  you one (see #6471).
+- Set default mode for LanguageTool to `standard` for new installations. If you
+  prefer `picky`, simply set it accordingly.
+- Fixed an issue where configuration changes emitted from the onboarding dialog
+  for new users were one-way-only, with no way to undo the changes. This has now
+  been changed: the buttons accurately reflect the actual configuration state,
+  and pressing the buttons multiple times toggles between the two sets of
+  suggested settings (#6429).
+- Update translations:
+  - `ko-KO` (#6478).
+  - `de-DE`.
+  - `ja-JP` (#6480).
+- Renamed "Remove line breaks" to "Remove excess line breaks."
+
+## Under the Hood
+
+- Update Electron to `v43.2.0`.
+
+# 4.7.0
+
+## GUI and Functionality
+
+- **Feature**: Custom shortcuts are here. You can now customize many of the
+  available shortcuts and assign them to your likings. This also includes the
+  various text transformations that we introduced in version 3.6.0 so that you
+  can bind frequently used ones to a handy shortcut. The feature comes with all
+  the standards of custom shortcuts, including an interactive shortcut recording
+  that visualizes which keys will become part of the shortcuts as you type them,
+  a reset function to restore the default, and an automated conflict detection
+  that lets you know whether a shortcut you have provided might conflict with
+  another one.
+- **Feature**: You can now set the editor theme to use a light or dark
+  appearance independent of the app appearance (#5851).
+- **Feature**: You can now click a long-running-task notification for both
+  projects and single files to directly open the corresponding file.
+- **Feature**: Popovers can now be closed with a quick press on `Escape`.
+- **Change**: Changed the layout of the project properties. Now the custom
+  templates and CSL section are placed on the general tab, while the export
+  profile picker has moved to its own tab. This gives the custom options more
+  visibility and provides a better grouping of the options.
+- Fixed a regression from 4.6.1 where the full-text search would not search any
+  open standalone files (#6387).
+- Fixed an issue on macOS where opening a file from Finder with no open main
+  window would not automatically open one (#6391).
+- Update translations:
+  - `ja-JP` (#6390).
+  - `de-DE` (#6449).
+  - `tr-TR` (#6450).
+- Fix snippets syntax and improve nested support (#6389).
+- Fixed a bug that would cause Zettlr to replace a magic quote with a regular
+  quote instead of deleting the text if some text was selected that happened to
+  be adjacent to a magic quote.
+- The Table of Contents title in the sidebar is now properly reset (#6397).
+- Improve toolbar styling (#6418).
+- Fixed a linter warning for footnotes without spaces (#6434).
+- Updated French translations (#6430).
+- Fixed a regression that causes windows to briefly flash white when macOS
+  vibrancy is disabled and the app is set to dark mode (#6438).
+- Fixed `s`/`S` shortcuts in vim mode (#6445).
+- Fixed a regression from the previous version that caused timeouts when using a
+  local LanguageTool integration with very long texts after the switch from
+  `got` to `ky`.
+- Fixed an issue where empty Pandoc spans would crash the span renderer (#6448).
+- Fixed an issue where the label of the "open automatically" checkbox in the
+  export popover would not be clickable.
+- Fixed a visual glitch when running multiple full-text searches in between
+  showing and hiding the search pane (#6454).
+- Fixed bold and italic styling (#6472).
+- Fix an issue leading to buggy interactions between snippets and the typewriter
+  mode (#6473).
+
+## Under the Hood
+
+- Update Pandoc to `v3.10.1`.
+- Update Electron to `v43.1.0`.
+- Zettlr now additionally trusts system certificates when making network
+  connections, meaning that custom TLS certificates can be used, e.g., for
+  corporate firewalls (#6006; #5271).
+- Added a new Vue directive, `v-focus` that can be applied to any element in a
+  Vue component and that will focus the element as soon as it is mounted to the
+  DOM.
+- Removed deprecated path check for the app.
+- Improve performance of the editor (#6388).
+- Improved handling of invalid dates in the statistics provider (#6433).
+- Remove superfluous search logging (#6401).
+- Refactor `posInNode` utility to `nodeAtPos` and align documentation with
+  behavior (#6399).
+- Update various (incl. transitive) dependencies.
+- Remove fix for an old `archiver` dependency.
+- Refactor TextPack export to match new `archiver` API.
+- Remove remnant `.tern-project` file.
+
+# 4.6.0
+
+## GUI and Functionality
+
+- **Feature**: Allow changing the trigger character for snippet (and emoji)
+  autocomplete. Until now, this was hard-coded to `:` (which is still the
+  default). However, since that interferes with the way French speakers use the
+  colon character (`Pour exemple : cette.`), we now allow different trigger
+  characters, relieving the colon where necessary. Currently supported are `/`
+  and `%` as alternatives (#5185; #6325).
+- **Feature**: The tutorial is now also available in Portuguese for new users
+  (#6373).
+- **Feature**: The "Remove line breaks" transformation in the editor is now also
+  available via the keyboard shortcut `Cmd/Ctrl-Alt-J` (#5913).
+- **Change**: This release brings many improvements to the full text search
+  (#6339):
+  - The full text search was completely rewritten to improve performance by 50%
+    to 100%.
+  - The autocompletes for both previous searches and the restrict-to-folder
+    functionalities have been drastically improved and work reliably (#5686).
+  - Ability to switch between case-insensitive and case-sensitive searches.
+  - Improvements in the presentation and layout of search results.
+- **Change**: On macOS, the default setting for window vibrancy is now off. This
+  makes the file manager opaque, but improves visual design with the new sticky
+  folder headers.
+- Add Elixir syntax highlighting for code blocks; identifiers: `elixir`, `ex`,
+  or `exs` (#6368).
+- Fixed missing click handlers for clicking links in tables (#4694).
+- Fixed an issue that would sometimes open the same link twice.
+- The file manager now uses tabular digits for displaying numbers in filenames.
+- Fixed an issue where code elements had a background color that overlaid the
+  selection (#6328).
+- Fixed a wrong font selection for comments.
+- Fixed strikethrough-elements no longer being stricken-through (#6330).
+- Fixed triple-clicks within tables to select entire table cells (#6344; #6100).
+- Add "Curl quotes" text transform to convert straight quotes to curly (smart)
+  quotes, the inverse of the existing "Straighten quotes" transform (#6259).
+- The main window's title now includes the current active file's title. This
+  allows automation that depends on the window title (#6283).
+- The table of contents now clears out when the last file of the editor is
+  closed (#6251).
+- Allow `Escape` to close the search panel regardless of whether it is currently
+  focused (#2970).
+- Moved the editor "Indentation," "Font size," and "Autocomplete" settings into
+  their own preferences groups.
+- The menubar on Windows is no longer styled using the system's accent color to
+  reduce potential distractions for users.
+- Update Brazilian (`pt-BR`) translations (#6348).
+- Fixed TableEditor swap rows/columns commands on macOS. Until now, they were
+  mapped to `Ctrl+Shift+Arrow`, which was misaligned with the main keymap.
+- Fixed an issue in the TableEditor where adding new rows could increase the
+  amount of surrounding whitespace in the newly inserted rows (#6369).
+- Fixed the alignment command for the TableEditor which previously would clear
+  out the entire column, if the column had no alignment set.
+- Fixed a regression from the previous version that disabled the references list
+  CSS (#6380).
+- Fixed a regression from the previous version that could lead to visual
+  artifacts in the thin and expanded file manager modes when switching files
+  (#6385).
+- Fixed a long-standing bug that would cause the application to go out of sync
+  with the operating system's UI theme on macOS when the application is set to
+  "follow the OS" in terms of UI theme, but the user has manually changed the
+  theme to light or dark. In that case, the app would lose synchronization with
+  the macOS theme source, causing the auto-switching mechanism to fail when the
+  operating system's UI theme changes.
+
+## Under the Hood
+
+- Upgrade Electron to `v42.3.3`.
+- Upgrade Pandoc to `v3.10`.
+- Pinned a transitive dependency of electron forge, `yauzl` to fix a bug on
+  newer Node versions (context: https://github.com/electron/forge/issues/4277).
+- Migrate the `openAttachment` utility from `got` to `ky`.
+- Migrate the LanguageTool API utility from `got` to `ky`.
+- Enforce proper comment styling.
+- The `StartupWMClass` has been switched back to lowercase, since apparently the
+  build step has correctly reverted the binary name to lowercase on Linux.
+- Handle symbolic links in chokidar watcher explicitly.
+
+# 4.5.0
+
+## GUI and Functionality
+
+- **Feature**: Long-running background tasks are now visually indicated with a
+  toolbar icon. This allows users to check on longer-running tasks such as
+  project exports or the re-indexing of new workspaces and observe the progress
+  as it happens.
+- Add HCL/Terraform fenced code block support (#6302).
+- Fixed Mermaid Chart labels not showing up (#6313).
+- Fixed icons in the statusbar not working.
+- Update Spanish (`es-ES`) translations (#6320).
+
+## Under the Hood
+
+- Updated Electron to `v41.3.0`.
+- Update `vue-virtual-scroller` to `v3.0.0`.
+- Fixed an issue where the config provider would not emit the old version
+  correctly (context: #6311).
+- **Breaking**: Refactored the editor themes (#6229). Now styling the app with
+  Custom CSS is easier and should work more straight forward, since there are
+  many CSS variables that you can peruse to adjust groups of elements at once.
+  **Note that this change might break your Custom CSS**. Make sure to check
+  anything after setup, and adjust it according to your liking.
+- Centralized DOMPurify functionality and default configuration in a new utility
+  function, that also allows icons using `cds-icon`.
+- Switch from `ts-node` to `tsx` for running unit tests.
+- Explicitly declare Zettlr as a `CommonJS` project.
+- Change the `Object.create(null)` contraption to hold BibTeX attachments to a
+  regular object to simplify the structure and unit tests.
+
+# 4.4.0
+
+## GUI and Functionality
+
 - **Feature**: The app now remembers if the file manager was open or closed
   across restarts and applies this setting on each start (#3679).
+- **Feature**: The names of open folders in the file manager tree will now
+  remain sticked to the top of the file manager as you scroll through its list
+  of children. This is especially helpful in the "combined" file manager mode
+  with folders containing many files and subfolders (such as reading notes or
+  Zettelkasten folders).
 - Add strikethrough to the Markdown AST parser (#6263).
 - Fixed Markdown-to-HTML output to generate more valid HTML. This makes
   comparisons with DOM-inserted HTML deterministic and should reduce the amount
@@ -23,6 +241,12 @@
   of the editor window, preventing the cursor to "stick" to the edge of the
   editor.
 - Update `pt-PT` translations (#6282).
+- Fixed an issue that would lead to unexpected navigation behavior across the
+  file manager (#4329).
+- Fixed an issue where the file list would follow slightly different filtering
+  rules than the file tree due to different function implementations.
+- Harmonized font usage to System fonts across the app (#5125).
+- Improve Mermaid chart error reporting (#6291).
 
 ## Under the Hood
 
@@ -34,7 +258,7 @@
 - Security: Enforce loading remote resources using HTTPS.
 - Security: Generously spread HTML sanitization across the application. The
   following changes have been made:
-  - Moved HTML sanitization to the edge (directly to the injection sinks)
+  - Moved HTML sanitization to the edge (directly to the injection sinks).
   - Removed HTML sanitization from the translation helpers. The reason is that
     DOMPurify does not work out of the box in the main process, so we also
     removed the sanitization from the renderer-translation helper. However, this

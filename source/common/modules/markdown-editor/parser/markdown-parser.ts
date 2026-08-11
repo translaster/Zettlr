@@ -46,7 +46,8 @@ import { vue } from '@codemirror/lang-vue'
 import { wast } from '@codemirror/lang-wast'
 import { xml } from '@codemirror/lang-xml'
 import { yaml } from '@codemirror/lang-yaml'
-
+import { hcl } from 'codemirror-lang-hcl'
+import { elixirLanguage } from 'codemirror-lang-elixir'
 // Now from the legacy modes package
 import { c, csharp, kotlin, objectiveC, dart, scala } from '@codemirror/legacy-modes/mode/clike'
 import { clojure } from '@codemirror/legacy-modes/mode/clojure'
@@ -121,6 +122,7 @@ const codeLanguages: Array<{ mode: Language|LanguageDescription|null, selectors:
   { mode: wast().language, selectors: ['wast'] },
   { mode: xml().language, selectors: ['xml'] },
   { mode: yaml().language, selectors: [ 'yaml', 'yml' ] },
+  { mode: hcl().language, selectors: [ 'hcl', 'terraform' ] },
   {
     // Hear me out: There may be no mermaid syntax highlighting, BUT we need it
     // to be inside a 'FencedCode' Syntax node so that our renderer can pick it
@@ -137,6 +139,7 @@ const codeLanguages: Array<{ mode: Language|LanguageDescription|null, selectors:
   { mode: StreamLanguage.define(dart), selectors: [ 'dart', 'dt' ] },
   { mode: StreamLanguage.define(diff), selectors: ['diff'] },
   { mode: StreamLanguage.define(dockerFile), selectors: [ 'docker', 'dockerfile' ] },
+  { mode: elixirLanguage, selectors: [ 'elixir', 'ex', 'exs' ] },
   { mode: StreamLanguage.define(elm), selectors: ['elm'] },
   { mode: StreamLanguage.define(fortran), selectors: ['fortran'] },
   { mode: StreamLanguage.define(fSharp), selectors: [ 'f#', 'fsharp' ] },

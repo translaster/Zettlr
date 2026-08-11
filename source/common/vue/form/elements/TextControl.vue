@@ -33,7 +33,9 @@
         <cds-icon shape="times"></cds-icon>
       </button>
     </div>
-    <p v-if="info !== undefined" class="info">{{ info }}</p>
+    <p v-if="info !== undefined" class="info">
+      {{ info }}
+    </p>
   </div>
 </template>
 
@@ -153,7 +155,7 @@ body div.form-control {
 
 body.darwin {
   div.form-control .input-text-button-group {
-    font-family:  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: system-ui, sans-serif;
     font-size: 13px;
     background-color: white;
     border: 1px solid rgb(210, 210, 210);

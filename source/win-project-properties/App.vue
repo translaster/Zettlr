@@ -20,6 +20,32 @@
         v-bind:label="projectTitleLabel"
       ></TextControl>
 
+      <!-- Then the CSL file -->
+      <FileControl
+        v-model="projectSettings.cslStyle"
+        v-bind:label="cslStyleLabel"
+        v-bind:reset="true"
+        v-bind:filter="[{ extensions: ['csl'], name: 'CSL Stylesheet' }]"
+      ></FileControl>
+      <!-- Also, the other possible files users can override -->
+      <FileControl
+        v-model="projectSettings.templates.tex"
+        v-bind:label="texTemplateLabel"
+        v-bind:reset="true"
+        v-bind:filter="[{ extensions: ['tex'], name: 'LaTeX Source' }]"
+      ></FileControl>
+      <FileControl
+        v-model="projectSettings.templates.html"
+        v-bind:label="htmlTemplateLabel"
+        v-bind:reset="true"
+        v-bind:filter="[{ extensions: [ 'html', 'htm' ], name: 'HTML Template' }]"
+      ></FileControl>
+    </div>
+    <div
+      v-show="currentTab === 1"
+      id="profiles-panel"
+      role="tabpanel"
+    >
       <ZtrAdmonition v-if="projectSettings.profiles.length === 0" style="margin: 10px 0">
         {{ projectBuildWarning }}
       </ZtrAdmonition>
@@ -36,7 +62,7 @@
       ></ListControl>
     </div>
     <div
-      v-show="currentTab === 1"
+      v-show="currentTab === 2"
       id="files-panel"
       role="tabpanel"
     >
@@ -115,27 +141,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Then the CSL file -->
-      <FileControl
-        v-model="projectSettings.cslStyle"
-        v-bind:label="cslStyleLabel"
-        v-bind:reset="true"
-        v-bind:filter="[{ extensions: ['csl'], name: 'CSL Stylesheet' }]"
-      ></FileControl>
-      <!-- Also, the other possible files users can override -->
-      <FileControl
-        v-model="projectSettings.templates.tex"
-        v-bind:label="texTemplateLabel"
-        v-bind:reset="true"
-        v-bind:filter="[{ extensions: ['tex'], name: 'LaTeX Source' }]"
-      ></FileControl>
-      <FileControl
-        v-model="projectSettings.templates.html"
-        v-bind:label="htmlTemplateLabel"
-        v-bind:reset="true"
-        v-bind:filter="[{ extensions: [ 'html', 'htm' ], name: 'HTML Template' }]"
-      ></FileControl>
     </div>
   </WindowChrome>
 </template>
@@ -167,9 +172,9 @@ import type { AssetsProviderIPCAPI, PandocProfileMetadata } from '@providers/ass
 import { PANDOC_READERS, PANDOC_WRITERS, SUPPORTED_READERS } from '@common/pandoc-util/pandoc-maps'
 import { type WindowTab } from '@common/vue/window/WindowTabbar.vue'
 import { useConfigStore, useWorkspaceStore } from 'source/pinia'
-import { pathBasename } from 'source/common/util/renderer-path-polyfill'
 import { pathToUnix } from 'source/common/util/path-to-unix'
 import { parseReaderWriter } from 'source/common/pandoc-util/parse-reader-writer'
+import getDocumentTitle from 'source/win-main/util/get-document-title'
 
 const ipcRenderer = window.ipc
 
@@ -195,8 +200,6 @@ const missingFilesMessage = trans('Some files are selected for export but no lon
 
 const configStore = useConfigStore()
 const workspaceStore = useWorkspaceStore()
-const useH1 = computed(() => configStore.config.fileNameDisplay.includes('heading'))
-const useTitle = computed(() => configStore.config.fileNameDisplay.includes('title'))
 
 const hasVibrancy = computed(() => configStore.config.window.vibrancy && process.platform === 'darwin')
 
@@ -206,6 +209,12 @@ const tabs: WindowTab[] = [
     label: trans('General'),
     icon: 'cog',
     controls: 'formats-panel'
+  },
+  {
+    id: 'profiles-selector',
+    label: trans('Profiles'),
+    icon: 'export',
+    controls: 'profiles-panel'
   },
   {
     id: 'files-control',
@@ -253,21 +262,12 @@ const exportFileList = computed(() => {
   const projectFiles = projectSettings.value.files
 
   for (const file of availableFiles.value) {
-    let basename = pathBasename(file.path)
-    if (file.type === 'file') {
-      if (useTitle.value && file.yamlTitle !== undefined) {
-        basename = file.yamlTitle
-      } else if (useH1.value && file.firstHeading !== null) {
-        basename = file.firstHeading
-      }
-    }
-
     // The app always defaults to the Unix path conventions (/ instead of \\)
     const relativePath = pathToUnix(file.path.slice(dirPath.length + 1))
     files.push({
       // NOTE: We must map the files to the relative paths from the directory!
       relativePath,
-      displayName: basename,
+      displayName: getDocumentTitle(file),
       included: projectFiles.includes(relativePath)
     })
   }

@@ -1,8 +1,9 @@
 <template>
-  <div class="tree-item-container">
+  <div ref="rootElement" class="tree-item-container">
     <div
       v-bind:class="{
         'tree-item': true,
+        'collapsed': collapsed && item.type === 'directory',
         [item.type]: true,
         [item.type === 'directory' ? item.settings.color ?? '' : '']: true,
         selected: isSelected,
@@ -180,13 +181,14 @@ import {
   hasMSOfficeExt,
   hasOpenOfficeExt,
   hasPDFExt,
-  hasExt,
-  hasMdOrCodeExt
+  hasExt
 } from 'source/common/util/file-extention-checks'
 import { isDotFile } from 'source/common/util/ignore-path'
 import type { FSALEventPayload, FSALEventPayloadChange } from 'source/app/service-providers/fsal'
 import { getSorter } from 'source/common/util/directory-sorter'
 import type { WritingTarget } from 'source/app/service-providers/targets'
+import { filterDescriptorChildren } from './util/filter-children'
+import getDocumentTitle from '../util/get-document-title'
 
 const ipcRenderer = window.ipc
 
@@ -208,6 +210,7 @@ const canAcceptDraggable = ref<boolean>(false) // Helper var set to true while s
 const uncollapseTimeout = ref<undefined|ReturnType<typeof setTimeout>>(undefined) // Used to uncollapse directories during drag&drop ops
 const nameEditingInput = ref<HTMLInputElement|null>(null)
 const displayText = ref<HTMLDivElement|null>(null)
+const rootElement = ref<HTMLDivElement|null>(null)
 const newObjectInput = ref<HTMLInputElement|null>(null)
 
 const children = ref<AnyDescriptor[]>([])
@@ -360,7 +363,8 @@ const filteredChildren = computed(() => {
     return []
   }
 
-  const { files, attachmentExtensions } = configStore.config
+  const { files } = configStore.config
+  const filter = filterDescriptorChildren()
 
   return children.value
     // Ensure we only consider filtered files
@@ -377,30 +381,7 @@ const filteredChildren = computed(() => {
         return child.type === 'directory' && (files.dotFiles.showInFilemanager || !isDotFile(child.name))
       }
 
-      // Filter files based on our settings
-      if (child.type === 'directory') {
-        return files.dotFiles.showInFilemanager || !isDotFile(child.name)
-      }
-
-      // We have to check for hidden files first so they are not
-      // included if they end in one of the accepted extensions
-      if (isDotFile(child.name)) {
-        return files.dotFiles.showInFilemanager
-      } else if (hasImageExt(child.path)) {
-        return files.images.showInFilemanager
-      } else if (hasPDFExt(child.path)) {
-        return files.pdf.showInFilemanager
-      } else if (hasMSOfficeExt(child.path)) {
-        return files.msoffice.showInFilemanager
-      } else if (hasOpenOfficeExt(child.path)) {
-        return files.openOffice.showInFilemanager
-      } else if (hasDataExt(child.path)) {
-        return files.dataFiles.showInFilemanager
-      } else if (hasMdOrCodeExt(child.path)) {
-        return true
-      } else {
-        return hasExt(child.path, attachmentExtensions) // Any other "other" file should be excluded
-      }
+      return filter(child)
     })
 })
 
@@ -448,24 +429,8 @@ const projectSortedFilteredChildren = computed(() => {
   return projectFiles.concat(files)
 })
 
-const useH1 = computed(() => configStore.config.fileNameDisplay.includes('heading'))
-const useTitle = computed(() => configStore.config.fileNameDisplay.includes('title'))
-const displayMdExtensions = computed(() => configStore.config.display.markdownFileExtensions)
-
 const basename = computed(() => {
-  if (props.item.type !== 'file') {
-    return props.item.name
-  }
-
-  if (useTitle.value && props.item.yamlTitle !== undefined) {
-    return props.item.yamlTitle
-  } else if (useH1.value && props.item.firstHeading !== null) {
-    return props.item.firstHeading
-  } else if (displayMdExtensions.value) {
-    return props.item.name
-  } else {
-    return props.item.name.replace(props.item.ext, '')
-  }
+  return getDocumentTitle(props.item)
 })
 
 const isSelected = computed(() => {
@@ -588,7 +553,30 @@ function scrollIntoView () {
       return
     }
 
-    displayText.value.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const fileTreeRoot = document.querySelector<HTMLDivElement>('#file-tree')
+
+    if (fileTreeRoot === null) {
+      return
+    }
+
+    const safetyMargin = 100 // Height of the quick filter + the sticky elements
+
+    const treeHeight = fileTreeRoot.clientHeight
+    const topEdge = fileTreeRoot.scrollTop + safetyMargin
+    const bottomEdge = fileTreeRoot.scrollTop + treeHeight
+
+    // Top and bottom are dynamically calculated from the top edge of the scroll
+    // element.
+    const { top, bottom } = displayText.value.getBoundingClientRect()
+    const absTop = fileTreeRoot.scrollTop + top
+    const absBottom = fileTreeRoot.scrollTop + bottom
+
+    if (absTop < topEdge) {
+      fileTreeRoot.scrollTo({ top: absTop - safetyMargin, behavior: 'smooth' })
+    } else if (absBottom > bottomEdge) {
+      const pos = absBottom - treeHeight
+      fileTreeRoot.scrollTo({ top: pos, behavior: 'smooth' })
+    }
   }).catch(err => console.error(err))
 }
 
@@ -763,6 +751,14 @@ body {
       display: flex;
       margin: 8px 0px;
 
+      // If a directory is open, ensure the containing folder remains sticked to
+      // the top as the user scrolls through its (possibly long) contents.
+      &.directory:not(.collapsed) {
+        position: sticky;
+        top: 0px;
+        z-index: 1;
+      }
+
       // Available directory colors (the colors are CSS variables specified
       // in WindowChrome.vue and string-values defined in PopoverDirProps.vue)
       &.blue { color: var(--accent-blue); }
@@ -849,6 +845,10 @@ body.darwin {
   .tree-item {
     color: rgb(53, 53, 53);
 
+    &.directory:not(.collapsed) {
+      background-color: #f5f5f5;
+    }
+
     // On macOS, non-standard icons are normally displayed in color
     clr-icon.special { color: var(--system-accent-color, --c-primary); }
 
@@ -874,13 +874,16 @@ body.darwin {
   &.dark {
     .tree-item {
       color: rgb(240, 240, 240);
+
+      &.directory:not(.collapsed) {
+        background-color: #1e1e1e;
+      }
     }
   }
 }
 
 body.win32 {
   .tree-item {
-
     .display-text {
       &.highlight {
         // This class is applied on drag & drop
@@ -888,12 +891,19 @@ body.win32 {
         color: var(--system-accent-color-contrast, --c-primary-contrast);
       }
     }
+
+    &.directory:not(.collapsed) {
+      background-color: #fafafa;
+    }
+  }
+
+  &.dark .tree-item.directory:not(.collapsed) {
+    background-color: #1e1e28;
   }
 }
 
 body.linux {
   .tree-item {
-
     .display-text {
       &.highlight {
         // This class is applied on drag & drop
@@ -901,6 +911,14 @@ body.linux {
         color: var(--system-accent-color-contrast, --c-primary-contrast);
       }
     }
+
+    &.directory:not(.collapsed) {
+      background-color: #fafafa;
+    }
+  }
+
+  &.dark .tree-item.directory:not(.collapsed) {
+    background-color: #282832;
   }
 }
 </style>
